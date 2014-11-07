@@ -22,7 +22,7 @@
 #define ANALOG_MAX_VAL ((1 << ANALOG_RES) - 1)
 
 // Timing definitions, in uS
-#define SAMPLE_INTERVAL     20       // Sampling
+#define SAMPLE_INTERVAL     0       // Sampling
 #define REFRESH_INTERVAL    100000   // Clear display
 #define BRIGTHNESS_INTERVAL 100000   // Update brightness from pot 
 
@@ -38,7 +38,10 @@
 /**** GLOBAL VARIABLES ****/
 
 // Array of samples
-int g_ys[TFT_WIDTH];
+int g_ys1[TFT_WIDTH];
+int g_ys2[TFT_WIDTH];
+int *g_ys;
+int g_yInUse = 1;
 
 // Intervals may vary
 int g_sampleInterval     = SAMPLE_INTERVAL;
@@ -102,25 +105,46 @@ void updatePwmFromPot()
 
 void displaySamples(bool bDisplay)
 {
+  int *ys;
+  
+  if (bDisplay) {
+    if (g_yInUse == 1)
+      ys = g_ys1;
+    else
+      ys = g_ys2;
+  }
+  else {
+    if (g_yInUse == 2)
+      ys = g_ys1;
+    else
+      ys = g_ys2;
+  }
+  
   if (bDisplay) {
     // draw in red  
     TFTscreen.fill(255, 0, 0);
     TFTscreen.stroke(255, 0, 0);
+    
+    for (int i = 1; i < TFT_WIDTH; i++) {
+      TFTscreen.line(i-1, ys[i-1], i, ys[i]);
+    }  
   }
   else {
     // draw with background color
     TFTscreen.fill(255, 255, 255);
     TFTscreen.stroke(255, 255, 255);
+    //TFTscreen.background(255, 255, 255); 
+    for (int i = 1; i < TFT_WIDTH; i++) {
+      TFTscreen.line(i-1, ys[i-1], i, ys[i]);
+    }
   }
-  
-  // map values
+}
+
+void mapValues()
+{
   for (int i = 0; i < TFT_WIDTH; i++) {
     g_ys[i] = map(g_ys[i], 0, ANALOG_MAX_VAL, TFT_HEIGHT - 1, 1);
   }
-  
-  for (int i = 1; i < TFT_WIDTH; i++) {
-    TFTscreen.line(i-1, g_ys[i-1], i, g_ys[i]);
-  }  
 }
 
 bool trigger()
@@ -130,6 +154,15 @@ bool trigger()
   int prevSample = ANALOG_MAX_VAL;
   
   tStart = micros();
+  
+  g_yInUse = (g_yInUse == 1 ? 2 : 1);
+  if (g_yInUse == 1)
+    g_ys = g_ys1;
+  else
+    g_ys = g_ys2;
+    
+  Serial.print("trigger, g_yInUse: ");
+  Serial.println(g_yInUse); 
   
   for (;;) {
     sample = analogRead(SCOPE_PIN);
@@ -158,6 +191,7 @@ void loop()
   
   switch (g_state) {
     case STATE_SAMPLE :
+      g_nextSampleTime = micros();
       // Wait for trigger
       trigger();
       tStart = g_nextSampleTime;
@@ -174,7 +208,8 @@ void loop()
             Serial.print(tEnd - tStart);
             Serial.print(", expected: ");
             Serial.println(g_sampleInterval * TFT_WIDTH);
-            TFTscreen.background(255, 255, 255);
+            //TFTscreen.background(255, 255, 255);
+            displaySamples(false);
             displaySamples(true);
             g_x = 0;
             g_state = STATE_REFRESH;
