@@ -22,12 +22,14 @@
 #define ANALOG_MAX_VAL ((1 << ANALOG_RES) - 1)
 
 // Timing definitions, in uS
-#define SAMPLE_INTERVAL     1        // Sampling
+#define SAMPLE_INTERVAL     20       // Sampling
 #define REFRESH_INTERVAL    100000   // Clear display
 #define BRIGTHNESS_INTERVAL 100000   // Update brightness from pot 
 
 // Trigger must abort if values don't match
 #define TRIGGER_TIMEOUT     1000000
+#define TRIGGER_DIR_UP      0
+#define TRIGGER_DIR_DOWN    1
 
 // State machine
 #define STATE_SAMPLE   0
@@ -56,6 +58,10 @@ int g_x = 0;
 
 // Current state machine state
 int g_state = STATE_SAMPLE;
+
+// Trigger
+int g_triggerVal = ANALOG_MAX_VAL / 2;
+int g_triggerDir = TRIGGER_DIR_UP;
 
 // Tft screen instance
 TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
@@ -108,8 +114,8 @@ void displaySamples(bool bDisplay)
   }
   
   // map values
-  for (int i = 1; i < TFT_WIDTH; i++) {
-    g_ys[i] = map(g_ys[i], 1, ANALOG_MAX_VAL, 1, TFT_HEIGHT - 1);
+  for (int i = 0; i < TFT_WIDTH; i++) {
+    g_ys[i] = map(g_ys[i], 0, ANALOG_MAX_VAL, TFT_HEIGHT - 1, 1);
   }
   
   for (int i = 1; i < TFT_WIDTH; i++) {
@@ -117,33 +123,29 @@ void displaySamples(bool bDisplay)
   }  
 }
 
-bool triggered()
+bool trigger()
 {
   int tStart;
- 
+  int sample = 0;
+  int prevSample = ANALOG_MAX_VAL;
+  
   tStart = micros();
   
-  while (analogRead(SCOPE_PIN) == 0) {
+  for (;;) {
+    sample = analogRead(SCOPE_PIN);
+    if ( (sample > g_triggerVal) && (prevSample < g_triggerVal) )
+      break;
+    prevSample = sample;
+      
     if (micros() - tStart >= TRIGGER_TIMEOUT) {
-      Serial.println("Timeout waiting for non 0 value");
-      return true;
-    }
+      Serial.println("Trigger timeout");
+      return false;
+    } 
   }
-
-  tStart = micros();
-
-  while (analogRead(SCOPE_PIN) != 0) {
-    if (micros() - tStart >= TRIGGER_TIMEOUT) {
-      Serial.println("Timeout waiting for 0 value");
-      return true;
-    }
-  }
-
-  g_x = 0;
-  for (int i = 0; i < 50; i++) {
-    g_ys[i] = 0;
-    g_x++;
-  }  
+  
+  g_ys[g_x++] = sample;
+  
+  g_nextSampleTime = micros() + SAMPLE_INTERVAL;
   
   return true;
 }
@@ -157,13 +159,10 @@ void loop()
   switch (g_state) {
     case STATE_SAMPLE :
       // Wait for trigger
-      while (!triggered()) {};
-      g_nextSampleTime = micros();
+      trigger();
       tStart = g_nextSampleTime;
       while (g_state == STATE_SAMPLE) {
         if (micros() >= g_nextSampleTime) {
-        //if (true) {
-
           g_ys[g_x] = analogRead(SCOPE_PIN);
           g_x++;
           g_nextSampleTime += g_sampleInterval;
@@ -197,4 +196,4 @@ void loop()
   }
 
 }
-git 
+
