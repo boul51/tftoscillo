@@ -23,13 +23,13 @@
 #define SAMPLE_MAX_VAL ((1 << 12) - 1)
 
 // Timing definitions, in uS
-#define SAMPLE_INTERVAL     0        // Sampling
+#define SAMPLE_INTERVAL     12        // Sampling
 #define REFRESH_INTERVAL    100000   // Clear display
 #define BRIGTHNESS_INTERVAL 100000   // Update brightness from pot 
 
 // Trigger must abort if values don't match
+//#define TRIGGER_TIMEOUT     500000
 #define TRIGGER_TIMEOUT     500000
-//#define TRIGGER_TIMEOUT     0
 #define TRIGGER_DIR_UP      0
 #define TRIGGER_DIR_DOWN    1
 
@@ -239,6 +239,15 @@ void mapValues()
   }
 }
 
+void swapBuffer()
+{
+  g_yInUse = (g_yInUse == 1 ? 2 : 1);
+  if (g_yInUse == 1)
+    g_ys = g_ys1;
+  else
+    g_ys = g_ys2;
+}
+
 bool trigger()
 {
   int tStart;
@@ -248,12 +257,6 @@ bool trigger()
   
   tStart = micros();
   
-  g_yInUse = (g_yInUse == 1 ? 2 : 1);
-  if (g_yInUse == 1)
-    g_ys = g_ys1;
-  else
-    g_ys = g_ys2;
-    
   for (;;) {
     //sample = analogRead(SCOPE_PIN);
     sample = freeRunAnalogRead();
@@ -310,6 +313,8 @@ void loop()
   switch (g_state) {
     case STATE_SAMPLE :
       g_nextSampleTime = micros();
+      // use new buffer
+      swapBuffer();
       // Wait for trigger
       trigger();
       tStart = micros();
