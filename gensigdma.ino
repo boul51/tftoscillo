@@ -3,7 +3,7 @@
 // DAC and timer setup from:
 // http://forum.arduino.cc/index.php?PHPSESSID=58ac5heg9q21h307sldn72jkm6&topic=205096.0
 
-#define DACC_DMA_BUF_SIZE 1000
+#define DACC_DMA_BUF_SIZE 4000
 #define DACC_DMA_BUF_NUM  2
 
 #define fDACC_DMA_BUF_SIZE ((float)(DACC_DMA_BUF_SIZE))
@@ -22,11 +22,28 @@ void dac_setup ()
   pmc_enable_periph_clk (DACC_INTERFACE_ID) ; // start clocking DAC
   DACC->DACC_CR = DACC_CR_SWRST ;  // reset DAC
 
+
   DACC->DACC_MR = 
-    DACC_MR_TRGEN_EN | DACC_MR_TRGSEL (1) |  // trigger 1 = TIO output of TC0
+    DACC_MR_TRGEN_EN |    // Enable trigger
+    DACC_MR_TRGSEL (1) |  // Trigger 1 = TIO output of TC0
     (0 << DACC_MR_USER_SEL_Pos) |  // select channel 0
     DACC_MR_REFRESH (0x01) |       // bit of a guess... I'm assuming refresh not needed at 48kHz
     (24 << DACC_MR_STARTUP_Pos) ;  // 24 = 1536 cycles which I think is in range 23..45us since DAC clock = 42MHz
+
+/*
+
+  DACC->DACC_MR = (0x1 << 0)  |   // Trigger enable
+                  (0x1 << 1)  |   // Trigger on TCO TIO
+                  (0x0 << 4)  |   // Half word transfer
+                  (0x0 << 5)  |   // Disable sleep mode
+                  (0x1 << 6)  |   // Fast wake up sleep mode
+                  (0x1 << 8)  |   // Refresh period
+                  (0x0 << 16) |   // Select channel 0
+                  (0x0 << 20) |   // Disable tag mode
+                  (0x0 << 21) |   // Max speed mode
+                  (0x3F << 24);    // Startup time
+                  */
+
 }
 
 void dac_dma_setup()
@@ -100,9 +117,109 @@ PRESCALER prescalers[] = {
 };
 
 int g_npb = 1; // Number of signal periods per buffer (full buffer, ie (DACC_DMA_BUF_NUM * DACC_DMA_BUF_SIZE) )
-int g_freqMult = 1;
+float g_freqMult = 1.;
 
-bool timer_setup(float freq)
+#define MAX_IRQ_FREQ 1000
+
+int g_sampleRate = 1000000.;
+//int g_sampleRate = 1500000.;
+
+bool timer_setup(float F)
+{
+  float fSampleRate = (float)g_sampleRate;
+  
+  while (fSampleRate / F > fDACC_DMA_BUF_SIZE) {
+    fSampleRate -= 1.0;
+  }
+  
+  // Try to find divider / rc combination to obtain sample rate
+  PRESCALER prescaler;
+  int numPrescalers = sizeof(prescalers) / sizeof(prescalers[0]);
+
+  bool bFound = false;
+  for (int i = 0; i < numPrescalers; i++) {
+    prescaler = prescalers[i];
+    // Check if maximal RC fits
+    float sr = fMCLK / (float)prescaler.div / 16536.; // TODO, bad value !!
+    // If sr is OK, keep this prescaler
+    if (sr < fSampleRate) {
+      bFound = true;
+      break;
+    }
+  }
+  
+  if (!bFound) {
+    Serial.println("No prescaler found !");
+    return false;
+  }
+  
+  Serial.print("Using prescaler with div: ");
+  Serial.println(prescaler.div);
+  Serial.print("Prescaler mask: ");
+  Serial.println(prescaler.bitMask);
+    
+  // We got prescaler, now calculate value for rc
+  float fRC = fMCLK / (fSampleRate * (float)prescaler.div);
+  
+  int RC = (int) fRC;
+  
+  // Calculate actual sample rate
+  g_sampleRate = MCLK / (RC * prescaler.div);
+  
+  // Calculate number of samples in a buffer for one F period
+  g_SamplesPerBuffer = (int) ((float)g_sampleRate / F);
+  
+  // Maximise number of samples in a buffer
+  g_SamplesPerBuffer *= (DACC_DMA_BUF_SIZE / g_SamplesPerBuffer);
+  
+  // Calculate actual buf size
+  //g_SamplesPerBuffer = (int)((float)g_npb * (float)g_sampleRate / F);
+  
+  // Update g_freqMult for generators
+  g_freqMult = (float)g_sampleRate / F;
+  
+  Serial.print("timer_setup, freq: ");
+  Serial.println(F);
+  Serial.print("fSR: ");
+  Serial.println(fSampleRate);
+  Serial.print("SR: ");
+  Serial.println(g_sampleRate);
+  Serial.print("div: ");
+  Serial.println(prescaler.div);
+  Serial.print("fRC: ");
+  Serial.println(fRC);
+  Serial.print("rc: ");
+  Serial.println(RC);
+  Serial.print("g_npb: ");
+  Serial.println(g_npb);
+  Serial.print("g_samplesPerBuffer: ");
+  Serial.println(g_SamplesPerBuffer);
+  Serial.print("g_freqMult: ");
+  Serial.println(g_freqMult);
+  
+  pmc_enable_periph_clk (TC_INTERFACE_ID + 0*3+0) ;  // clock the TC0 channel for DACC 0
+
+  TcChannel * t = &(TC0->TC_CHANNEL)[0] ;    // pointer to TC0 registers for its channel 0
+  t->TC_CCR = TC_CCR_CLKDIS ;  // disable internal clocking while setup regs
+  t->TC_IDR = 0xFFFFFFFF ;     // disable interrupts
+  t->TC_SR ;                   // read int status reg to clear pending
+
+  t->TC_CMR = prescaler.bitMask | //TC_CMR_TCCLKS_TIMER_CLOCK1 |   // use TCLK1 (prescale by 128, = 656250 kHz)
+              TC_CMR_WAVE |                  // waveform mode
+              TC_CMR_WAVSEL_UP_RC |          // count-up PWM using RC as threshold
+              TC_CMR_EEVT_XC0 |     // Set external events from XC0 (this setup TIOB as output)
+              TC_CMR_ACPA_CLEAR | TC_CMR_ACPC_CLEAR |
+              TC_CMR_BCPB_CLEAR | TC_CMR_BCPC_CLEAR ;
+
+  t->TC_RC = RC;
+  t->TC_RA = RC/2;
+  
+  t->TC_CMR = (t->TC_CMR & 0xFFF0FFFF) | TC_CMR_ACPA_CLEAR | TC_CMR_ACPC_SET ;  // set clear and set from RA and RC compares  
+  t->TC_CCR = TC_CCR_CLKEN | TC_CCR_SWTRG ;  // re-enable local clocking and switch to hardware trigger source.  
+  
+}
+
+bool timer_setupOld2(float freq)
 {
   // Sample vs signal period:
   // Tsample = Tsig / (DACC_DMA_BUF_NUM * DACC_DMA_BUF_SIZE)
@@ -145,7 +262,7 @@ bool timer_setup(float freq)
 
   Firq = Fsample / fDACC_DMA_BUF_SIZE;
   
-  g_freqMult = (int)Fsample / (int)freq;
+  g_freqMult = Fsample / freq;
   
   Serial.print("Calculated IRQ freq: ");
   Serial.println(Firq);
@@ -338,30 +455,34 @@ g
 
 void genSquare()
 {
+  static int prevVal = 12;
   //for (int i = 0; i < DACC_DMA_BUF_NUM * DACC_DMA_BUF_SIZE; i++) {
   for (int i = 0; i < DACC_DMA_BUF_NUM * g_SamplesPerBuffer; i++) {    
     int bufIndex    = i / g_SamplesPerBuffer;
     int sampleIndex = i % g_SamplesPerBuffer;
     
-    if ( ( (i * 2 / g_freqMult) % 2) == 0)    
+    float angle = (float)i * 2. / g_freqMult;
+    
+    if ( ((int)(angle)) % 2 == 0)    
       g_daccSamples[bufIndex][sampleIndex] = 0;
     else
-      g_daccSamples[bufIndex][sampleIndex] = 1000;
+      g_daccSamples[bufIndex][sampleIndex] = 0xFFFF;
+  }
+}
 
-      
-    /*
-    if (i < DACC_DMA_BUF_NUM * g_SamplesPerBuffer / 2)
-      g_daccSamples[bufIndex][sampleIndex] = 1000;
-    else
-      g_daccSamples[bufIndex][sampleIndex] = 0;
-      */
+void genZero()
+{
+  for (int i = 0; i < DACC_DMA_BUF_NUM * g_SamplesPerBuffer; i++) {
+    int bufIndex    = i / g_SamplesPerBuffer;
+    int sampleIndex = i % g_SamplesPerBuffer;
+    g_daccSamples[bufIndex][sampleIndex] = 0;
+    //g_daccSamples[bufIndex][sampleIndex] = 0xFFFF;
   }
 }
 
 void genSin()
 {
-  Serial.print("in genSin, g_npb: ");
-  Serial.println(g_npb);
+  int tStart = micros();
   
   for (int i = 0; i < DACC_DMA_BUF_NUM * g_SamplesPerBuffer; i++) {
     int bufIndex    = i / g_SamplesPerBuffer;
@@ -369,7 +490,7 @@ void genSin()
 
     float angle = 2. * PI * (float)i / (float)g_freqMult;
     
-    g_daccSamples[bufIndex][sampleIndex] = (int) ((sin(angle) + 1.0) / 2. * 1024.);
+    g_daccSamples[bufIndex][sampleIndex] = (int) ((sin(angle) + 1.0) / 2. * 4096. );
 
 /*
     Serial.print("Generated sample for i: ");
@@ -384,22 +505,26 @@ void genSin()
     Serial.println(g_daccSamples[bufIndex][sampleIndex]);
 */
   }
-  
-  Serial.println("Generated sinus waveform");
+
+  int tEnd = micros();  
+  Serial.print("Generated sinus waveform in ");
+  Serial.print(tEnd - tStart);
+  Serial.print(" us");
 }
 
 void genSigDmaSetup() {
   
-  timer_setup(10000.00);
+  timer_setup(500.);
 
   // Generation must be done after timer_setup since globals are initialized there  
   //genSquare();
   genSin();
+  //genZero();
   
-  //timer_setup(2000);
   dac_setup();
   dac_dma_setup();
   dac_dma_start();
+  
 }
 
 void dac_write(int val)
