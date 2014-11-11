@@ -1,4 +1,6 @@
 
+#include <GenSigDma.h>
+
 #include <SPI.h>
 #include <TFT.h>  // Arduino LCD library
 
@@ -73,19 +75,20 @@ TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
 void genSignal();
 void genSigDmaSetup();
+void genInit();
 
 void setup() {
 
-  Serial.begin(115200);
+ Serial.begin(115200);
   
-  while (!Serial.available()) {}
+    while (!Serial.available()) {}
   
-  //SPI.begin(TFT_CS_PIN);
   // Initialize LCD
   TFTscreen.begin();
   TFTscreen.background(255, 255, 255);
   
-  //SPI.setClockDivider(TFT_CS_PIN, 255);
+  // SPI.setClockDivider(TFT_CS_PIN, 1);
+  // Modified TFT library to set SPI clock divider to 1
   
   // draw in red  
   TFTscreen.fill(255, 0, 0);
@@ -93,6 +96,7 @@ void setup() {
   
   analogReadResolution(ANALOG_RES);
   analogWriteResolution(ANALOG_RES);
+  analogWrite(DAC0, 0);
   
   pinMode(SCOPE_PIN, INPUT);
 
@@ -101,6 +105,9 @@ void setup() {
   ADC->ADC_MR |= 0x80;
   ADC->ADC_CR = 2;
   ADC->ADC_CHER = 0x80;
+  
+  //Serial.print("Written ADC_MR: ");
+  //Serial.println(ADC->ADC_MR);
   
   pinMode(TFT_BL_PIN, OUTPUT);
   //pinMode(POT_PIN, INPUT);
@@ -118,7 +125,7 @@ void setup() {
   g_nextSampleTime = micros();
   
   //genInit();
-  genSigDmaSetup();
+    genSigDmaSetup();
 }
 
 void updatePwmFromPot()
@@ -280,7 +287,7 @@ bool trigger()
     }
       
     if (micros() - tStart >= TRIGGER_TIMEOUT) {
-      Serial.println("Trigger timeout");
+      //Serial.println("Trigger timeout");
       return false;
     }
   }
@@ -329,10 +336,12 @@ void loop()
           // time to display ?
           if (g_x >= TFT_WIDTH) {
             tEnd = micros();
+            /*
             Serial.print("us spent sampling: ");
             Serial.print(tEnd - tStart);
             Serial.print(", expected: ");
             Serial.println(g_sampleInterval * TFT_WIDTH);
+            */
             //TFTscreen.background(255, 255, 255);
             mapValues();
             displaySamples(false);
