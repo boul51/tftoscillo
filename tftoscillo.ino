@@ -18,20 +18,22 @@
 #define TFT_HEIGHT  128
 
 // Pot and scope input pins
-#define POT_PIN      A1
-#define SCOPE_PIN    A0
+#define POT_PIN        A1
+#define POT_CHANNEL    6
+#define SCOPE_PIN      A0
+#define SCOPE_CHANNEL  7
 
 // In free run mode, we'll always be at 12 bits res
 #define SAMPLE_MAX_VAL ((1 << 12) - 1)
 
 // Timing definitions, in uS
-#define SAMPLE_INTERVAL     12        // Sampling
+#define SAMPLE_INTERVAL     0        // Sampling
 #define REFRESH_INTERVAL    100000   // Clear display
 #define BRIGTHNESS_INTERVAL 100000   // Update brightness from pot 
 
 // Trigger must abort if values don't match
-//#define TRIGGER_TIMEOUT     500000
 #define TRIGGER_TIMEOUT     500000
+//#define TRIGGER_TIMEOUT     0
 #define TRIGGER_DIR_UP      0
 #define TRIGGER_DIR_DOWN    1
 
@@ -40,6 +42,9 @@
 #define STATE_REFRESH  1
 
 /**** GLOBAL VARIABLES ****/
+
+// Pointer on GenSigDma object
+GenSigDma *g_genSigDma = NULL;
 
 // Array of samples
 int g_ys1[TFT_WIDTH];
@@ -73,20 +78,20 @@ int g_triggerDir = TRIGGER_DIR_UP;
 // Tft screen instance
 TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
-void genSignal();
-void genSigDmaSetup();
-void genInit();
-
 void setup() {
 
- Serial.begin(115200);
+  Serial.begin(115200);
   
-    while (!Serial.available()) {}
+  while (!Serial.available()) {}
   
+  Serial.println("Will init LCD");
+    
   // Initialize LCD
   TFTscreen.begin();
   TFTscreen.background(255, 255, 255);
   
+  Serial.println("Did init LCD");
+
   // SPI.setClockDivider(TFT_CS_PIN, 1);
   // Modified TFT library to set SPI clock divider to 1
   
@@ -96,21 +101,23 @@ void setup() {
   
   analogReadResolution(ANALOG_RES);
   analogWriteResolution(ANALOG_RES);
-  analogWrite(DAC0, 0);
+  //analogWrite(DAC0, 0);
   
+  pinMode(POT_PIN, INPUT);
   pinMode(SCOPE_PIN, INPUT);
 
   // these lines set free running mode on adc 7 (pin A0)
-  int t = analogRead(0);
-  ADC->ADC_MR |= 0x80;
+  int t;
+  t = analogRead(SCOPE_PIN);
+  t = analogRead(POT_PIN);
+  ADC->ADC_MR |= (0x1 << 7); // Freerun mode
   ADC->ADC_CR = 2;
-  ADC->ADC_CHER = 0x80;
+  ADC->ADC_CHER = ( (0x1 << POT_CHANNEL) | (0x1 << SCOPE_CHANNEL) ); // Enable channels 7 and 8
   
   //Serial.print("Written ADC_MR: ");
   //Serial.println(ADC->ADC_MR);
   
   pinMode(TFT_BL_PIN, OUTPUT);
-  //pinMode(POT_PIN, INPUT);
   
   // Set brightness based on pot
   //analogWrite(TFT_BL_PIN, analogRead(POT_PIN));    
@@ -125,9 +132,12 @@ void setup() {
   g_nextSampleTime = micros();
   
   //genInit();
-    genSigDmaSetup();
+    //genSigDmaSetup();
+    Serial.println("Will create GenSigDma");
+    g_genSigDma = new GenSigDma();
+    Serial.println("Did create GenSigDma");    
 }
-
+/*
 void updatePwmFromPot()
 {
   return;
@@ -138,6 +148,7 @@ void updatePwmFromPot()
     analogWrite(TFT_BL_PIN, potVal);  
   }
 }
+*/
 
 void displaySamples(bool bDisplay)
 {
@@ -266,7 +277,7 @@ bool trigger()
   
   for (;;) {
     //sample = analogRead(SCOPE_PIN);
-    sample = freeRunAnalogRead();
+    sample = freeRunAnalogRead(SCOPE_CHANNEL);
     
 /*    
     Serial.print("Got sample: ");
@@ -301,19 +312,25 @@ bool trigger()
   return true;
 }
 
-inline int freeRunAnalogRead()
+inline int freeRunAnalogRead(int channel)
 {
-    while((ADC->ADC_ISR & 0x80)==0); // wait for conversion
-    return ADC->ADC_CDR[7];   
+    //while((ADC->ADC_ISR & 0x80)==0); // wait for conversion
+    while ((ADC->ADC_ISR & (0x1 << channel) == 0));
+    
+    return ADC->ADC_CDR[channel];
 }
 
-void loop_genSigDma();
+//void loop_genSigDma();
 
 void loop()
 {
   int time = micros();
   int tStart;
   int tEnd;
+  static bool s_started = false;
+  static int  nextToggleTime = 0;
+  int potVal = 0;
+  static int prevPotVal = 0;
   
   //return;
   
@@ -329,7 +346,7 @@ void loop()
         if (micros() >= g_nextSampleTime) {
         //if (true) {
           //g_ys[g_x] = analogRead(SCOPE_PIN);
-          g_ys[g_x] = freeRunAnalogRead();
+          g_ys[g_x] = freeRunAnalogRead(SCOPE_CHANNEL);
           g_x++;
           g_nextSampleTime += g_sampleInterval;
           
@@ -364,8 +381,54 @@ void loop()
       }
     break;
   }
+  
+  potVal = freeRunAnalogRead(POT_CHANNEL);//analogRead(POT_PIN);
+  
+  //p("Got potVal: %d\n", potVal);
+  
+  #define MIN_FREQ 10000.
+  #define MAX_FREQ 100000.
+  
+    float freq = 1000.00;
+  
+    if (abs(potVal - prevPotVal) > 100) {
+        freq = map(potVal, 0, ANALOG_MAX_VAL, MIN_FREQ, MAX_FREQ);
+        prevPotVal = potVal;
+        p("New pot val, set new freq %d\n", freq);
+        g_genSigDma->Stop();
+        s_started = false;
+        //delay(1000);
+    }
 
-  loop_genSigDma();
-  //genSignal();
+
+    if (!s_started) {
+        Serial.println("Starting");
+        g_genSigDma->SetMaxSampleRate(1000000);
+        //g_genSigDma->SetWaveForm(WAVEFORM_SINUS, 1017.23);
+        g_genSigDma->SetWaveForm(WAVEFORM_SINUS, freq);
+        g_genSigDma->Start();
+        Serial.println("Started");
+        s_started = true;
+    }
+    
+
+//    g_genSigDma->Loop(true);
+
+/*   
+    static int waveform = (int)WAVEFORM_MIN + 1;
+
+    if (millis() >= nextToggleTime) {
+        g_genSigDma->Stop();
+        Serial.println("Starting");
+        g_genSigDma->SetMaxSampleRate(1000000);
+        g_genSigDma->SetWaveForm((GENSIGDMA_WAVEFORM)waveform, 500.00);
+        g_genSigDma->Start();
+        waveform++;
+        if (waveform >= (int)WAVEFORM_MAX) {
+            waveform = (int)WAVEFORM_MIN + 1;
+        }
+        nextToggleTime = millis() + 3000;
+    }
+*/
 }
 
