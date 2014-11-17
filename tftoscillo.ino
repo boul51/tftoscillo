@@ -1,5 +1,5 @@
-
 #include <GenSigDma.h>
+#include <AdcDma.h>
 
 #include <SPI.h>
 #include <TFT.h>  // Arduino LCD library
@@ -23,6 +23,8 @@
 #define SCOPE_PIN      A0
 #define SCOPE_CHANNEL  7
 
+#define ADC_SAMPLE_RATE 100000
+
 // In free run mode, we'll always be at 12 bits res
 #define SAMPLE_MAX_VAL ((1 << 12) - 1)
 
@@ -45,6 +47,7 @@
 
 // Pointer on GenSigDma object
 GenSigDma *g_genSigDma = NULL;
+AdcDma *g_adcDma = NULL;
 
 // Array of samples
 int g_ys1[TFT_WIDTH];
@@ -72,7 +75,7 @@ int g_x = 0;
 int g_state = STATE_SAMPLE;
 
 // Trigger
-int g_triggerVal = 900;
+int g_triggerVal = 2000;
 int g_triggerDir = TRIGGER_DIR_UP;
 
 // Tft screen instance
@@ -99,20 +102,11 @@ void setup() {
   TFTscreen.fill(255, 0, 0);
   TFTscreen.stroke(255, 0, 0);
   
-  analogReadResolution(ANALOG_RES);
   analogWriteResolution(ANALOG_RES);
   //analogWrite(DAC0, 0);
   
   pinMode(POT_PIN, INPUT);
   pinMode(SCOPE_PIN, INPUT);
-
-  // these lines set free running mode on adc 7 (pin A0)
-  int t;
-  t = analogRead(SCOPE_PIN);
-  t = analogRead(POT_PIN);
-  ADC->ADC_MR |= (0x1 << 7); // Freerun mode
-  ADC->ADC_CR = 2;
-  ADC->ADC_CHER = ( (0x1 << POT_CHANNEL) | (0x1 << SCOPE_CHANNEL) ); // Enable channels 7 and 8
   
   //Serial.print("Written ADC_MR: ");
   //Serial.println(ADC->ADC_MR);
@@ -135,7 +129,13 @@ void setup() {
     //genSigDmaSetup();
     Serial.println("Will create GenSigDma");
     g_genSigDma = new GenSigDma();
-    Serial.println("Did create GenSigDma");    
+    Serial.println("Did create GenSigDma");
+
+    uint adcChannel = SCOPE_PIN;    
+    g_adcDma = AdcDma::GetInstance();
+    g_adcDma->SetAdcChannels(&adcChannel, 1);
+    g_adcDma->SetTimerChannel(2);
+    g_adcDma->SetSampleRate(ADC_SAMPLE_RATE);
 }
 /*
 void updatePwmFromPot()
@@ -386,33 +386,33 @@ void loop()
   
   //p("Got potVal: %d\n", potVal);
   
-  #define MIN_FREQ 10000.
+  #define MIN_FREQ 1000.
   #define MAX_FREQ 100000.
   
-    float freq = 1000.00;
+    float freq = 6000.;
+    static int waveform = (int)WAVEFORM_MIN + 1;  
   
     if (abs(potVal - prevPotVal) > 100) {
-        freq = map(potVal, 0, ANALOG_MAX_VAL, MIN_FREQ, MAX_FREQ);
+        //freq = (int)map(potVal, 0, ANALOG_MAX_VAL, MIN_FREQ, MAX_FREQ);
+        waveform = map(potVal, 0, ANALOG_MAX_VAL, (int)WAVEFORM_MIN + 1, (int)WAVEFORM_MAX);
         prevPotVal = potVal;
-        p("New pot val, set new freq %d\n", freq);
+        //p("New pot val, set new freq %s\n", F2S(freq));
         g_genSigDma->Stop();
         s_started = false;
-        //delay(1000);
+        //delay(1000);xxx
     }
-
 
     if (!s_started) {
-        Serial.println("Starting");
+        //Serial.println("Starting");
         g_genSigDma->SetMaxSampleRate(1000000);
-        //g_genSigDma->SetWaveForm(WAVEFORM_SINUS, 1017.23);
-        g_genSigDma->SetWaveForm(WAVEFORM_SINUS, freq);
+        //g_genSigDma->SetWaveForm(WAVEFORM_SINUS, freq);
+        g_genSigDma->SetWaveForm((GENSIGDMA_WAVEFORM)waveform, freq);
         g_genSigDma->Start();
-        Serial.println("Started");
+        //Serial.println("Started");
         s_started = true;
     }
-    
 
-//    g_genSigDma->Loop(true);
+    g_genSigDma->Loop(true);
 
 /*   
     static int waveform = (int)WAVEFORM_MIN + 1;
