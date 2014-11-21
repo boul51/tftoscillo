@@ -1,3 +1,4 @@
+//Just to have auto-completion working in qtCreator..
 #include <GenSigDma.h>
 #include <AdcDma.h>
 
@@ -25,12 +26,13 @@
 
 #define TRIGGER_TIMEOUT 1000
 
-#define ADC_MIN_SAMPLE_RATE 5000
-#define ADC_MAX_SAMPLE_RATE 800000
+// Tests show that ADC doesn't sample well with freq >= 1830000 Hz.
+#define ADC_MIN_SAMPLE_RATE 500000
+#define ADC_MAX_SAMPLE_RATE 1830000
 uint g_adcSampleRate = ADC_MIN_SAMPLE_RATE;
 
-#define DAC_MIN_FREQ    3000
-#define DAC_MAX_FREQ    200000
+#define DAC_MIN_FREQ    5000
+#define DAC_MAX_FREQ    800000
 #define DAC_WAVEFORM    WAVEFORM_SINUS
 int g_dacFreq = DAC_MIN_FREQ;
 
@@ -163,7 +165,7 @@ void drawSamples(uint16_t *samples, int count)
         g_drawLastY = samples[iSample];
 
         if (g_drawLastX >= TFT_WIDTH)
-            return;
+			return;
     }
 }
 
@@ -184,7 +186,7 @@ void loop()
 
     g_adcDma->SetSampleRate(g_adcSampleRate);
     g_adcDma->Start();
-    g_adcDma->SetTrigger(g_triggerVal, AdcDma::RisingEdge, SCOPE_CHANNEL, TRIGGER_TIMEOUT);
+	g_adcDma->SetTrigger(g_triggerVal, AdcDma::RisingEdge, SCOPE_CHANNEL, TRIGGER_TIMEOUT);
     g_adcDma->SetTriggerPreBuffersCount(4);
     g_adcDma->TriggerEnable(true);
     while (!g_adcDma->DidTriggerComplete(&bTriggerTimeout)){}

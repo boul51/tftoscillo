@@ -57,6 +57,72 @@ AdcDma *AdcDma::GetInstance()
 	return m_instance;
 }
 
+void AdcDma::findTriggerSample()
+{
+	int bufLoops = 0;
+	int iBuf = m_readBufIndex;
+	bool bArmed = false;
+
+	while (bufLoops < m_bufCount) {
+		for (int iSample = 0; iSample < m_bufSize; iSample++) {
+			if (m_triggerMode == RisingEdge) {
+				if (!bArmed) {
+					if (m_buffers[iBuf][iSample] < m_triggerVal) {
+						bArmed = true;
+					}
+				}
+				else {
+					if (m_buffers[iBuf][iSample] >= m_triggerVal) {
+						// Got trigger sample
+						m_triggerSampleBufIndex = iBuf;
+						m_triggerSampleIndex = iSample;
+						return;
+					}
+				}
+			}
+			else if (m_triggerMode == FallingEdge) {
+				if (!bArmed) {
+					if (m_buffers[iBuf][iSample] > m_triggerVal) {
+						bArmed = true;
+					}
+				}
+				else {
+					if (m_buffers[iBuf][iSample] < m_triggerVal) {
+						// Got trigger sample
+						m_triggerSampleBufIndex = iBuf;
+						m_triggerSampleIndex = iSample;
+						return;
+					}
+				}
+			}
+		}
+		iBuf++;
+		bufLoops++;
+	}
+
+	p("%s: did not find trigger sample !\n", __FUNCTION__);
+
+	return;
+}
+
+bool AdcDma::SetBuffers(int bufCount, int bufSize)
+{
+	if (m_captureState != CaptureStateStopped) {
+		return false;
+	}
+
+	if (bufCount > ADC_DMA_DEF_BUF_COUNT) {
+		return false;
+	}
+
+	if (bufSize > ADC_DMA_DEF_BUF_SIZE) {
+		return false;
+	}
+
+	m_bufCount = bufCount;
+	m_bufSize = bufSize;
+}
+
 bool AdcDma::SetTimerChannel(int timerChannel)
 {
 	if (timerChannel > ADC_DMA_MAX_TIMER_CHANNEL) {
@@ -366,6 +432,10 @@ void AdcDma::triggerEnterDone(TriggerEvent *event)
 	// RNPR (next pointer) was used
 	// Update write buffer to last written buffer by DMA, that is ReadIndex
 	m_writeBufIndex = m_readBufIndex;
+
+	if (!m_bTriggerTimeout) {
+		findTriggerSample();
+	}
 
 	triggerSetState(TriggerStateDone);
 }

@@ -494,7 +494,7 @@ bool GenSigDma::GenSin()
 
 		float angle = 2. * PI * (float)iSample / (float)m_freqMult;
 
-		m_buffers[0][iSample] = (int) ((sin(angle) + 1.0) / 2. * (float)m_daccMaxVal);
+		m_buffers[0][iSample] = (int) ((cos(angle) + 1.0) / 2. * (float)m_daccMaxVal);
 	}
 
 	DuplicatePeriods();

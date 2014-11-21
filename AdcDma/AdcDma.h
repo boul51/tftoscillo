@@ -109,6 +109,7 @@ public :
 	bool SetTriggerPreBuffersCount(int triggerPreBuffersCount);
 	bool GetTriggerSampleAddress(uint16_t **pBufAddress, int *pSampleIndex);
 	bool ReadSingleValue(int adcChannel, int *value);
+	bool SetBuffers(int bufCount, int bufSize);
 private :
 
 	AdcDma();
@@ -174,6 +175,7 @@ private :
 	void DisableCompareMode();
 	void SetCaptureState(CaptureState captureState);
 	void triggerEnterReading(TriggerEvent *event);
+	void findTriggerSample();
 };
 
 // Debug declarations
