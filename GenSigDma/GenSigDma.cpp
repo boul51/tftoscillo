@@ -4,6 +4,16 @@
 // DAC and timer setup from:
 // http://forum.arduino.cc/index.php?PHPSESSID=58ac5heg9q21h307sldn72jkm6&topic=205096.0
 
+#ifdef p
+#undef p
+#endif
+#define p(...) gensigdma_print(__VA_ARGS__)
+
+#ifdef F2S
+#undef F2S
+#endif
+#define F2S(f) gensigdma_floatToStr(f, 4)
+
 #define DACC_DMA_BUF_SIZE 8000
 #define DACC_DMA_BUF_NUM  1
 
@@ -541,7 +551,7 @@ void GenSigDma::Loop(bool bResetStats)
 }
 
 #ifdef GEN_SIG_DMA_DEBUG
-void gensigdma_print(char *fmt, ... ) {
+void gensigdma_print(const char *fmt, ... ) {
 	char buf[128]; // resulting string limited to 128 chars
 	va_list args;
 
@@ -577,3 +587,6 @@ char *gensigdma_floatToStr(float f, int precision)
 void gensigdma_print(char *fmt, ... ) {}
 char *gensigdma_floatToStr(float f, int precision) {}
 #endif
+
+#undef p
+#undef F2S

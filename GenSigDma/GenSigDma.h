@@ -129,16 +129,7 @@ private :
 };
 
 // Debug declarations
-void gensigdma_print(char *fmt, ... );
+void gensigdma_print(const char *fmt, ... );
 char *gensigdma_floatToStr(float f, int precision);
-
-char *gensigdma_floatToStr(float f, int precision);
-#ifndef p
-#define p(...) gensigdma_print(__VA_ARGS__)
-#endif
-
-#ifndef F2S
-#define F2S(f) gensigdma_floatToStr(f, 4)
-#endif
 
 #endif
