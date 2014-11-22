@@ -1,8 +1,9 @@
-/opt/arduino-1.5.8/arduino --upload tftoscillo.ino
+source prefs.txt
+
+$ARDUINO_EXE --verify $SKETCH_NAME
+
 if [ $? != 0 ]; then
-	echo "arduino upload command failed !"
+	echo "arduino build command failed !"
 	exit
 fi
-minicom -D /dev/ttyACM0
-#tail -f /dev/ttyACM0
 
