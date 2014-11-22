@@ -121,6 +121,8 @@ bool AdcDma::SetBuffers(int bufCount, int bufSize)
 
 	m_bufCount = bufCount;
 	m_bufSize = bufSize;
+
+	return true;
 }
 
 bool AdcDma::SetTimerChannel(int timerChannel)
@@ -149,6 +151,9 @@ bool AdcDma::SetTimerChannel(int timerChannel)
 	case 2 :
 		trgSel = ADC_TRIG_TIO_CH_2;
 		break;
+	default :
+		p("%s: invalid timer channel %d !\n", m_timerChannel);
+		return false;
 	}
 
 	int mr = ADC->ADC_MR & ~ADC_MR_TRGSEL_Msk;
@@ -246,6 +251,8 @@ bool AdcDma::SetTrigger(int value, TriggerMode mode, int triggerChannel, int tri
 		m_triggerTimeoutMaxInts = 0;
 	}
 
+	p("Calculated m_triggerTimeoutMaxInts %d\n", m_triggerTimeoutMaxInts);
+
 	uint16_t v = (uint16_t)value;
 
 	ADC->ADC_CWR =
@@ -268,7 +275,7 @@ bool AdcDma::TriggerEnable(bool bEnable)
 
 void AdcDma::triggerSetState(TriggerState state)
 {
-	p("Trigger state change %s -> %s\n", StrTriggerState[m_triggerState], StrTriggerState[state]);
+	p("Trigger state change %s -> %s%s\n", StrTriggerState[m_triggerState], StrTriggerState[state], m_bTriggerTimeout ? " (timeout)" : "");
 	m_triggerState = state;
 }
 
@@ -323,6 +330,10 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 		case TriggerEventKindCompareInterrupt :
 			triggerEnterCapturing(event);
 			break;
+
+		case TriggerEventKindTimeout :
+			triggerEnterCapturing(event);
+			break;
 		}
 		break;
 
@@ -363,8 +374,6 @@ void AdcDma::triggerEnterEnabled(TriggerEvent *event)
 	m_triggerBufferInts = 0;
 	m_bTriggerTimeout = false;
 
-	triggerSetState(TriggerStateEnabled);
-
 	int cmpMode;
 
 	// We first need value to go out of window to arm the trigger
@@ -375,6 +384,9 @@ void AdcDma::triggerEnterEnabled(TriggerEvent *event)
 	case RisingEdge :
 		cmpMode = ADC_EMR_CMPMODE_LOW;
 		break;
+	default :
+		p("%s: invalid trigger mode !\n", __FUNCTION__);
+		return;
 	}
 
 	int emr = ADC->ADC_EMR;
@@ -388,6 +400,8 @@ void AdcDma::triggerEnterEnabled(TriggerEvent *event)
 
 	ADC->ADC_EMR = emr;
 
+	triggerSetState(TriggerStateEnabled);
+
 	triggerEnableInterrupt();
 
 	// Restart DMA in case if was stopped at the end of previous trigger
@@ -397,8 +411,6 @@ void AdcDma::triggerEnterEnabled(TriggerEvent *event)
 void AdcDma::triggerEnterArmed(TriggerEvent *event)
 {
 	int emr;
-
-	triggerSetState(TriggerStateArmed);
 
 	// Change mode of interrupt
 	switch (m_triggerMode) {
@@ -412,6 +424,8 @@ void AdcDma::triggerEnterArmed(TriggerEvent *event)
 		break;
 	}
 
+	triggerSetState(TriggerStateArmed);
+
 	return;
 }
 
@@ -419,6 +433,7 @@ void AdcDma::triggerEnterCapturing(TriggerEvent *event)
 {
 	// Capture started, we don't need compare interruptions anymore
 	triggerDisableInterrupt();
+	DisableCompareMode();
 
 	triggerSetState(TriggerStateCapturing);
 
@@ -789,6 +804,8 @@ bool AdcDma::SetTriggerPreBuffersCount(int triggerPreBuffersCount)
 		return false;
 
 	m_triggerPreBuffersCount = triggerPreBuffersCount;
+
+	return true;
 }
 
 bool AdcDma::GetTriggerSampleAddress(uint16_t **pBufAddress, int *pSampleIndex)
@@ -809,9 +826,27 @@ void AdcDma::HandleInterrupt()
 {
 	int isr = ADC->ADC_ISR;
 
+	if (isr & ADC_ISR_COMPE) {
+		p("ADC_ISR_COMPE\n");
+
+		// Get current sample
+		int bufIndex = m_writeBufIndex;
+		int sampleIndex = m_bufSize - ADC->ADC_RCR - 1;	// -1 since we want previous sample
+
+		// If sampleIndex in negative, it means sample is in previous buffer
+		if (sampleIndex < 0) {
+			bufIndex = m_writeBufIndex - 1;
+			if (bufIndex < 0)
+				bufIndex = m_bufCount - 1;
+			sampleIndex = m_bufSize - 1;	// Last sample in previous buffer
+		}
+
+		triggerHandleInterrupt(bufIndex, sampleIndex);
+	}
+
 	if (isr & ADC_ISR_ENDRX) {
-		//p("ADC_ISR_ENDRX, RPR 0x%08x (count %d), RNPR 0x%08x (count %d)\n",
-		//	ADC->ADC_RPR, ADC->ADC_RCR, ADC->ADC_RNPR, ADC->ADC_RNCR);
+		//p("ADC_ISR_ENDRX\n");
+
 		m_triggerBufferInts++;
 
 		switch (m_triggerState) {
@@ -840,6 +875,8 @@ void AdcDma::HandleInterrupt()
 
 	if (isr & ADC_ISR_RXBUFF) {
 
+		p("ADC_ISR_RXBUFF");
+
 		switch (m_triggerState) {
 
 		case TriggerStateCapturing :
@@ -854,22 +891,6 @@ void AdcDma::HandleInterrupt()
 		}
 
 		Stop();
-	}
-
-	if (isr & ADC_ISR_COMPE) {
-		// Get current sample
-		int bufIndex = m_writeBufIndex;
-		int sampleIndex = m_bufSize - ADC->ADC_RCR - 1;	// -1 since we want previous sample
-
-		// If sampleIndex in negative, it means sample is in previous buffer
-		if (sampleIndex < 0) {
-			bufIndex = m_writeBufIndex - 1;
-			if (bufIndex < 0)
-				bufIndex = m_bufCount - 1;
-			sampleIndex = m_bufSize - 1;	// Last sample in previous buffer
-		}
-
-		triggerHandleInterrupt(bufIndex, sampleIndex);
 	}
 }
 
@@ -908,7 +929,7 @@ const char *AdcDma::StrTriggerState [] = {
 };
 
 #ifdef ADC_DMA_DEBUG
-void adcdma_print(char *fmt, ... ) {
+void adcdma_print(const char *fmt, ... ) {
 	char buf[128]; // resulting string limited to 128 chars
 	va_list args;
 
@@ -941,6 +962,6 @@ char *adcdma_floatToStr(float f, int precision)
 }
 
 #else
-void adcdma_print(char *fmt, ... ) {}
+void adcdma_print(const char *fmt, ... ) {}
 char *adcdma_floatToStr(float f, int precision) {}
 #endif

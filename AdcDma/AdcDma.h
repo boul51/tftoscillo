@@ -180,7 +180,7 @@ private :
 
 // Debug declarations
 char *adcdma_floatToStr(float f, int precision);
-void adcdma_print(char *fmt, ... );
+void adcdma_print(const char *fmt, ... );
 
 #ifndef F2S
 #define F2S(f) floatToStr(f, 4)
