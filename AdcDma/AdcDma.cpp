@@ -87,7 +87,7 @@ void AdcDma::findTriggerSample()
 					}
 				}
 				else {
-					if (m_buffers[iBuf][iSample] < m_triggerVal) {
+					if (m_buffers[iBuf][iSample] <= m_triggerVal) {
 						// Got trigger sample
 						m_triggerSampleBufIndex = iBuf;
 						m_triggerSampleIndex = iSample;
@@ -271,6 +271,8 @@ bool AdcDma::TriggerEnable(bool bEnable)
 		event.eventKind = TriggerEventKindDisable;
 
 	triggerUpdateState(&event);
+
+	return true;
 }
 
 void AdcDma::triggerSetState(TriggerState state)
@@ -306,6 +308,9 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 		switch (event->eventKind) {
 		case TriggerEventKindEnable :
 			triggerEnterEnabled(event);
+			break;
+		default :
+			goto _unhandledEvent;
 		}
 		break;
 
@@ -314,14 +319,14 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 		case TriggerEventKindDisable :
 			triggerEnterDisabled(event);
 			break;
-
 		case TriggerEventKindCompareInterrupt :
 			triggerEnterArmed(event);
 			break;
-
 		case TriggerEventKindTimeout :
 			triggerEnterCapturing(event);
 			break;
+		default :
+			goto _unhandledEvent;
 		}
 		break;
 
@@ -330,10 +335,11 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 		case TriggerEventKindCompareInterrupt :
 			triggerEnterCapturing(event);
 			break;
-
 		case TriggerEventKindTimeout :
 			triggerEnterCapturing(event);
 			break;
+		default :
+			goto _unhandledEvent;
 		}
 		break;
 
@@ -342,6 +348,8 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 		case TriggerEventKindAllBuffersFull :
 			triggerEnterDone(event);
 			break;
+		default :
+			goto _unhandledEvent;
 		}
 		break;
 
@@ -350,16 +358,32 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 		case TriggerEventKindOneBufferRead :
 			triggerEnterReading(event);
 			break;
+		default :
+			goto _unhandledEvent;
 		}
+		break;
 
 	case TriggerStateReading :
 		switch (event->eventKind) {
 		case TriggerEventKindAllBuffersRead :
 			triggerEnterDisabled(event);
+			break;
+		default :
+			goto _unhandledEvent;
 		}
+		break;
 
+	default :
+		p("%s: Invalid current state !\n", __FUNCTION__);
 		break;
 	}
+
+	return;
+
+_unhandledEvent :
+
+	p("%s: Unhandled event from state %s\n", __FUNCTION__, StrTriggerState[m_triggerState]);
+	return;
 }
 
 void AdcDma::triggerEnterDisabled(TriggerEvent *event)
@@ -505,6 +529,8 @@ bool AdcDma::DeleteBuffers()
 
 	m_bufCount = 0;
 	m_bufSize  = 0;
+
+	return true;
 }
 
 bool AdcDma::SetAdcChannels(int *adcChannels, int adcChannelsCount)
@@ -660,6 +686,8 @@ bool AdcDma::ConfigureAdc(bool bSoftwareTrigger)
 			ADC_MR_TRACKTIM(0)			|	// Minimal value for tracking time
 			ADC_MR_TRANSFER(0)			|	// Minimal value for transfer period
 			ADC_MR_USEQ_NUM_ORDER;			// Don't use sequencer mode
+
+	return true;
 }
 
 void AdcDma::StopAdc()
@@ -735,19 +763,27 @@ uint16_t *AdcDma::GetReadBuffer()
 	switch (m_triggerState) {
 	case TriggerStateDisabled :
 	case TriggerStateReading :
+	  {
 		//p("Write index %d, read index %d\n", m_writeBufIndex, m_readBufIndex);
 		if (m_readBufIndex != m_writeBufIndex) {
 			buf = m_buffers[m_readBufIndex];
 		}
 		break;
-
+	  }
 	case TriggerStateDone :
+	  {
 		// No buffer was read at this point, but data are ready
 		buf = m_buffers[m_readBufIndex];
 		// Notify trigger machine state that one buffer was read to enter state TriggerStateReading
-		TriggerEvent event = {TriggerEventKindOneBufferRead, 0, 0};
+		TriggerEvent event = {TriggerEventKindOneBufferRead, 0, 0};;
 		triggerUpdateState(&event);
 		break;
+	  }
+	default :
+	  {
+		p("%s: Can't get read buffer in state %s\n", __FUNCTION__, StrTriggerState[m_triggerState]);
+		break;
+	  }
 	}
 
 	return buf;
@@ -827,7 +863,6 @@ void AdcDma::HandleInterrupt()
 	int isr = ADC->ADC_ISR;
 
 	if (isr & ADC_ISR_COMPE) {
-		p("ADC_ISR_COMPE\n");
 
 		// Get current sample
 		int bufIndex = m_writeBufIndex;
@@ -842,6 +877,10 @@ void AdcDma::HandleInterrupt()
 		}
 
 		triggerHandleInterrupt(bufIndex, sampleIndex);
+
+		// A new compare interruption might have been raised before we changed mode of comparator,
+		// so read again status register to avoid reacting to this interruption on next IRQ
+		isr = ADC->ADC_ISR;
 	}
 
 	if (isr & ADC_ISR_ENDRX) {
@@ -855,6 +894,8 @@ void AdcDma::HandleInterrupt()
 			// Auto advance read buffer when waiting for a trigger event
 			if (m_triggerBufferInts >= m_triggerPreBuffersCount)
 				AdvanceReadBuffer();
+			break;
+		default :
 			break;
 		}
 
@@ -870,12 +911,12 @@ void AdcDma::HandleInterrupt()
 				triggerUpdateState(&timeoutEvent);
 			}
 			break;
+		default :
+			break;
 		}
 	}
 
 	if (isr & ADC_ISR_RXBUFF) {
-
-		p("ADC_ISR_RXBUFF");
 
 		switch (m_triggerState) {
 
@@ -946,7 +987,6 @@ void adcdma_print(const char *fmt, ... ) {
 char *adcdma_floatToStr(float f, int precision)
 {
 	int mult = 1;
-	int multRes;
 	int digit[32];
 	static char s_ftstrbuf[32];
 	sprintf(s_ftstrbuf, "%d.", (int)f);
@@ -963,5 +1003,5 @@ char *adcdma_floatToStr(float f, int precision)
 
 #else
 void adcdma_print(const char *fmt, ... ) {}
-char *adcdma_floatToStr(float f, int precision) {}
+char *adcdma_floatToStr(float f, int precision) {return NULL;}
 #endif
