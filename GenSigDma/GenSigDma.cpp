@@ -110,6 +110,8 @@ bool GenSigDma::Stop()
 		return false;
 
 	m_started = false;
+
+	return true;
 }
 
 bool GenSigDma::SetTimerChannel(int timerChannel)
@@ -124,6 +126,8 @@ bool GenSigDma::SetTimerChannel(int timerChannel)
 	}
 
 	m_timerChannel = timerChannel;
+
+	return true;
 }
 
 bool GenSigDma::SetWaveForm(GENSIGDMA_WAVEFORM wf, float freq, float *pActualFreq)
@@ -167,6 +171,9 @@ bool GenSigDma::SetWaveForm(GENSIGDMA_WAVEFORM wf, float freq, float *pActualFre
 	case WAVEFORM_TRIANGLE :
 		GenTriangle();
 		break;
+	default :
+		p("%s: Invalid waveform !\n", __FUNCTION__);
+		return false;
 	}
 
 	if (pActualFreq) {
@@ -541,8 +548,6 @@ void GenSigDma::Loop(bool bResetStats)
 {
 	int s = millis() / 1000;
 
-	GENSIGDMA_STATS *pStats;
-
 	if (s != m_stats.lastSec) {
 		DisplayStats(s);
 		if (bResetStats)
@@ -568,7 +573,6 @@ void gensigdma_print(const char *fmt, ... ) {
 char *gensigdma_floatToStr(float f, int precision)
 {
 	int mult = 1;
-	int multRes;
 	int digit[32];
 	static char s_ftstrbuf[32];
 	sprintf(s_ftstrbuf, "%d.", (int)f);

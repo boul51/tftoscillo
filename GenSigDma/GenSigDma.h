@@ -7,7 +7,7 @@
 
 // Uncomment to enable Serial debug messages
 // Increases size, and needs Serial to be initialized
-#define GEN_SIG_DMA_DEBUG
+//#define GEN_SIG_DMA_DEBUG
 
 #define GENSIGDMA_MAX_SAMPLE_RATE 2000000
 
