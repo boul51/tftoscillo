@@ -147,8 +147,12 @@ bool GenSigDma::SetWaveForm(GENSIGDMA_WAVEFORM wf, float freq, float *pActualFre
 		return false;
 	}
 
-	if ( (m_waveform == wf) && (freq == m_freq) )
+	if ( (m_waveform == wf) && (freq == m_freq) ) {
+		if (pActualFreq) {
+			*pActualFreq = m_freq;
+		}
 		return true;
+	}
 
 	m_freq = freq;
 	m_waveform = wf;
@@ -588,8 +592,8 @@ char *gensigdma_floatToStr(float f, int precision)
 }
 
 #else
-void gensigdma_print(char *fmt, ... ) {}
-char *gensigdma_floatToStr(float f, int precision) {}
+void gensigdma_print(const char *fmt, ... ) {}
+char *gensigdma_floatToStr(float f, int precision) {return NULL;}
 #endif
 
 #undef p
