@@ -96,7 +96,7 @@ void AdcDma::findTriggerSample()
 				}
 			}
 		}
-		iBuf++;
+		iBuf = (iBuf + 1) % m_bufCount;
 		bufLoops++;
 	}
 
@@ -473,6 +473,8 @@ void AdcDma::triggerEnterDone(TriggerEvent *event)
 	m_writeBufIndex = m_readBufIndex;
 
 	if (!m_bTriggerTimeout) {
+		// Finding "manually" the first sample after trigger is a bit more accurate
+		// than just relying on the interruption timing at high sample rate
 		findTriggerSample();
 	}
 
