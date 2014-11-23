@@ -9,7 +9,7 @@
 // Increases size, and needs Serial to be initialized
 //#define GEN_SIG_DMA_DEBUG
 
-#define GENSIGDMA_MAX_SAMPLE_RATE 2000000
+#define GENSIGDMA_MAX_SAMPLE_RATE 1500000
 
 #define GENSIGDMA_DACC_MIN_VAL ((int)(0))
 #define GENSIGDMA_DACC_MAX_VAL ((int)(4095)) // 12 bits
