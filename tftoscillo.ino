@@ -39,7 +39,7 @@ uint g_adcSampleRate = ADC_MIN_SAMPLE_RATE;
 uint g_dacMinFreq = DAC_MIN_FREQ;
 uint g_dacMaxFreq = DAC_MAX_FREQ;
 uint g_dacFreq = g_dacMinFreq;
-GENSIGDMA_WAVEFORM g_dacWaveForm = WAVEFORM_SINUS;
+GenSigDma::WaveForm g_dacWaveForm = GenSigDma::WaveFormSinus;
 
 #define TRIGGER_MIN_VAL    0
 #define TRIGGER_MAX_VAL    ANALOG_MAX_VAL
@@ -245,16 +245,16 @@ void formHandler()
 
 	if (strForm == NULL) {
 		switch (g_dacWaveForm) {
-		case WAVEFORM_SAW :
+		case GenSigDma::WaveFormSaw :
 			Serial.println("saw");
 			break;
-		case WAVEFORM_SINUS :
+		case GenSigDma::WaveFormSinus :
 			Serial.println("sinus");
 			break;
-		case WAVEFORM_SQUARE :
+		case GenSigDma::WaveFormSquare :
 			Serial.println("square");
 			break;
-		case WAVEFORM_TRIANGLE :
+		case GenSigDma::WaveFormTriangle :
 			Serial.println("triangle");
 			break;
 		default :
@@ -263,16 +263,16 @@ void formHandler()
 	}
 
 	if (strcmp(strForm, "saw") == 0) {
-		g_dacWaveForm = WAVEFORM_SAW;
+		g_dacWaveForm = GenSigDma::WaveFormSaw;
 	}
 	else if (strcmp(strForm, "sinus") == 0) {
-		g_dacWaveForm = WAVEFORM_SINUS;
+		g_dacWaveForm = GenSigDma::WaveFormSinus;
 	}
 	else if (strcmp(strForm, "square") == 0) {
-		g_dacWaveForm = WAVEFORM_SQUARE;
+		g_dacWaveForm = GenSigDma::WaveFormSquare;
 	}
 	else if (strcmp(strForm, "triangle") == 0) {
-		g_dacWaveForm = WAVEFORM_TRIANGLE;
+		g_dacWaveForm = GenSigDma::WaveFormTriangle;
 	}
 	else {
 		return;

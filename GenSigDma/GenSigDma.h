@@ -17,33 +17,33 @@
 #define DAC_DMA_MAX_TIMER_CHANNEL 2
 #define DAC_DMA_DEF_TIMER_CHANNEL 0
 
-typedef struct _GENSIGDMA_STATS {
-	int64_t lastSamplesCount;
-	int64_t lastIrqsCount;
-	int     lastSec;
-	int64_t totalSamplesCount;
-	int64_t totalIrqsCount;
-}GENSIGDMA_STATS;
-
-typedef enum _GENSIGDMA_WAVEFORM {
-	WAVEFORM_NONE,
-	WAVEFORM_MIN,
-	WAVEFORM_SQUARE,
-	WAVEFORM_SINUS,
-	WAVEFORM_SAW,
-	WAVEFORM_TRIANGLE,
-	WAVEFORM_MAX,
-}GENSIGDMA_WAVEFORM;
-
 class GenSigDma
 {
 public :
 	GenSigDma();
 	~GenSigDma();
 
+	typedef enum _WaveForm {
+		WaveFormNone,
+		WaveFormMin,
+		WaveFormSquare,
+		WaveFormSinus,
+		WaveFormSaw,
+		WaveFormTriangle,
+		WaveFormMax,
+	}WaveForm;
+
+	typedef struct _Stats {
+		int64_t lastSamplesCount;
+		int64_t lastIrqsCount;
+		int     lastSec;
+		int64_t totalSamplesCount;
+		int64_t totalIrqsCount;
+	}Stats;
+
 	bool Start();
 	bool Stop();
-	bool SetWaveForm(GENSIGDMA_WAVEFORM wf, float freq, float *pActualFreq = NULL);
+	bool SetWaveForm(GenSigDma::WaveForm wf, float freq, float *pActualFreq = NULL);
 
 	bool SetMaxSampleRate(int rate);
 
@@ -71,7 +71,7 @@ public :
 
 	void Loop(bool bResetStats);
 
-	GENSIGDMA_STATS *GetStats() {
+	Stats *GetStats() {
 		return &m_stats;
 	}
 
@@ -84,8 +84,8 @@ private :
 	int	  m_sampleRate;
 	int   m_maxSampleRate;
 	float m_freq;
-	GENSIGDMA_WAVEFORM m_waveform;
-	GENSIGDMA_STATS    m_stats;
+	WaveForm m_waveform;
+	Stats    m_stats;
 
 	// Buffers management
 	uint16_t *m_buffers[2];

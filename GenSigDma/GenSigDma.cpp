@@ -58,7 +58,7 @@ GenSigDma::GenSigDma()
 	m_samplesPerBuffer = 0;
 	m_currBuf = 0;
 	m_started = false;
-	m_waveform = WAVEFORM_NONE;
+	m_waveform = WaveFormNone;
 	m_sampleRate = GENSIGDMA_MAX_SAMPLE_RATE;
 	m_maxSampleRate = GENSIGDMA_MAX_SAMPLE_RATE;
 	m_daccMaxVal = GENSIGDMA_DACC_MAX_VAL;
@@ -88,9 +88,6 @@ GenSigDma::~GenSigDma()
 bool GenSigDma::Start()
 {
 	if (m_started)
-		return false;
-
-	if (m_waveform == WAVEFORM_NONE)
 		return false;
 
 	if (!StartDma())
@@ -130,9 +127,9 @@ bool GenSigDma::SetTimerChannel(int timerChannel)
 	return true;
 }
 
-bool GenSigDma::SetWaveForm(GENSIGDMA_WAVEFORM wf, float freq, float *pActualFreq)
+bool GenSigDma::SetWaveForm(WaveForm wf, float freq, float *pActualFreq)
 {
-	if (wf <= WAVEFORM_MIN || wf >= WAVEFORM_MAX) {
+	if (wf <= WaveFormMin || wf >= WaveFormMax) {
 		p("GenSigDma::SetWaveForm: Invalid waveform !\n");
 		return false;
 	}
@@ -163,16 +160,16 @@ bool GenSigDma::SetWaveForm(GENSIGDMA_WAVEFORM wf, float freq, float *pActualFre
 	}
 
 	switch (wf) {
-	case WAVEFORM_SINUS :
+	case WaveFormSinus :
 		GenSin();
 		break;
-	case WAVEFORM_SQUARE :
+	case WaveFormSquare :
 		GenSquare();
 		break;
-	case WAVEFORM_SAW :
+	case WaveFormSaw :
 		GenSaw();
 		break;
-	case WAVEFORM_TRIANGLE :
+	case WaveFormTriangle :
 		GenTriangle();
 		break;
 	default :
@@ -201,7 +198,7 @@ bool GenSigDma::SetMaxSampleRate(int rate)
 
 	if (m_maxSampleRate != rate) {
 		// Clear waveform if sample rate changed to force user to re-generate before start
-		m_waveform = WAVEFORM_NONE;
+		m_waveform = WaveFormNone;
 		m_maxSampleRate = rate;
 	}
 
@@ -399,7 +396,7 @@ bool GenSigDma::StopDma()
 void DACC_Handler()
 {
 	void *buf;
-	GENSIGDMA_STATS *pStats;
+	GenSigDma::Stats *pStats;
 	int samplesPerBuffer = g_instance->GetSamplesPerBuffer();
 
 	int curBuf = g_instance->GetCurrBufIndex();
