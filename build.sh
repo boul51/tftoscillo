@@ -1,4 +1,6 @@
-source prefs.txt
+#!/bin/sh
+
+source ./prefs.mk
 
 $ARDUINO_EXE --verify $SKETCH_NAME
 
