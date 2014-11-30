@@ -36,10 +36,10 @@ uint g_adcSampleRate = ADC_MIN_SAMPLE_RATE;
 
 #define DAC_MIN_FREQ    5000
 #define DAC_MAX_FREQ    800000
-#define DAC_WAVEFORM    WAVEFORM_SINUS
-int g_dacMinFreq = DAC_MIN_FREQ;
-int g_dacMaxFreq = DAC_MAX_FREQ;
+uint g_dacMinFreq = DAC_MIN_FREQ;
+uint g_dacMaxFreq = DAC_MAX_FREQ;
 uint g_dacFreq = g_dacMinFreq;
+GENSIGDMA_WAVEFORM g_dacWaveForm = WAVEFORM_SINUS;
 
 #define TRIGGER_MIN_VAL    0
 #define TRIGGER_MAX_VAL    ANALOG_MAX_VAL
@@ -85,6 +85,7 @@ void setup() {
 	SCmd.addCommand("fr", freqRangeHandler);
 	SCmd.addCommand("sr", sampleRateRangeHandler);
 	SCmd.addCommand("zoom", zoomHandler);
+	SCmd.addCommand("form", formHandler);
 	SCmd.addDefaultHandler(defaultHandler);
 
 	//while (!Serial.available()) {}
@@ -208,8 +209,22 @@ void triggerModeHandler()
 {
 	char * strMode = SCmd.next();
 
-	if (strMode == NULL)
+	if (strMode == NULL) {
+		switch (g_triggerMode) {
+		case AdcDma::RisingEdge :
+			Serial.println("rising");
+			break;
+
+		case AdcDma::FallingEdge :
+			Serial.println("falling");
+			break;
+
+		default :
+			break;
+
 		return;
+		}
+	}
 
 	if ( (strcmp(strMode, "rising") == 0) ||
 		 (strcmp(strMode, "r") == 0) ) {
@@ -222,6 +237,48 @@ void triggerModeHandler()
 	else {
 		return;
 	}
+}
+
+void formHandler()
+{
+	char * strForm = SCmd.next();
+
+	if (strForm == NULL) {
+		switch (g_dacWaveForm) {
+		case WAVEFORM_SAW :
+			Serial.println("saw");
+			break;
+		case WAVEFORM_SINUS :
+			Serial.println("sinus");
+			break;
+		case WAVEFORM_SQUARE :
+			Serial.println("square");
+			break;
+		case WAVEFORM_TRIANGLE :
+			Serial.println("triangle");
+			break;
+		default :
+			break;
+		}
+	}
+
+	if (strcmp(strForm, "saw") == 0) {
+		g_dacWaveForm = WAVEFORM_SAW;
+	}
+	else if (strcmp(strForm, "sinus") == 0) {
+		g_dacWaveForm = WAVEFORM_SINUS;
+	}
+	else if (strcmp(strForm, "square") == 0) {
+		g_dacWaveForm = WAVEFORM_SQUARE;
+	}
+	else if (strcmp(strForm, "triangle") == 0) {
+		g_dacWaveForm = WAVEFORM_TRIANGLE;
+	}
+	else {
+		return;
+	}
+
+	updateSignalFreq(true);
 }
 
 void mapBufferValues(uint16_t *buf, int count)
@@ -241,18 +298,18 @@ void updateSignalFreq(bool bForceUpdate)
 	g_adcDma->ReadSingleValue(FREQ_CHANNEL, &potVal);
 
 	if (bForceUpdate || (abs(potVal - prevPotVal) > 100) ) {
-		//freq = 10 * (int)map(potVal, 0, ANALOG_MAX_VAL, g_dacMinFreq / 10, g_dacMaxFreq / 10);
-		freq = map(potVal, 0, ANALOG_MAX_VAL, g_dacMinFreq, g_dacMaxFreq);
+		// Divide by 4 to avoid clipping
+		freq = map(potVal / 4, 0, ANALOG_MAX_VAL / 4, g_dacMinFreq, g_dacMaxFreq);
 		prevPotVal = potVal;
 		g_genSigDma->Stop();
 		float actFreq;
-		g_genSigDma->SetWaveForm(DAC_WAVEFORM, freq, &actFreq);
+		g_genSigDma->SetWaveForm(g_dacWaveForm, freq, &actFreq);
 		g_dacFreq = actFreq;
 		g_genSigDma->Start();
 		Serial.print("Set frequency: ");
-		Serial.print((int)freq);
+		Serial.print(freq);
 		Serial.print(", actual freq: ");
-		Serial.println((int)actFreq);
+		Serial.println(actFreq);
 	}
 }
 
@@ -278,9 +335,9 @@ void updateAdcSampleRate(bool bForceUpdate)
 
 	g_adcDma->ReadSingleValue(ADC_RATE_CHANNEL, &potVal);
 
-	if (bForceUpdate || (abs(potVal - prevPotVal) > 100) ) {
-		g_adcSampleRate = 1000 * map(potVal, 0, ANALOG_MAX_VAL, g_adcMinSampleRate / 1000, g_adcMaxSampleRate / 1000);
-		//g_adcSampleRate = 10;
+	if (bForceUpdate || (abs(potVal - prevPotVal) > 10) ) {
+		// Divide by 4 to avoid clipping
+		g_adcSampleRate = map(potVal / 4, 0, ANALOG_MAX_VAL / 4, g_adcMinSampleRate, g_adcMaxSampleRate);
 		prevPotVal = potVal;
 		Serial.print("Setting ADC SR: ");
 		Serial.println(g_adcSampleRate);
@@ -408,11 +465,18 @@ void drawSamples()
 		int lastX = 0;
 		int lastY = samples[0];
 
-		for (int iSample = 1; iSample < TFT_WIDTH / zoom; iSample++) {
+		int iSample = 1;
+		for (;;) {
 			uint16_t sample = samples[iSample];
 			TFTscreen.line(lastX, lastY, lastX + zoom, sample);
 			lastX += zoom;
 			lastY = sample;
+			iSample++;
+			// Need this for zoom
+			if (iSample >= TFT_WIDTH)
+				break;
+			if (lastX >= TFT_WIDTH)
+				break;
 		}
 	}
 
