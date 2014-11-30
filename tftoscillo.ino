@@ -1,4 +1,3 @@
-//Just to have auto-completion working in qtCreator..
 #include <GenSigDma.h>
 #include <AdcDma.h>
 
@@ -40,13 +39,18 @@ uint g_adcSampleRate = ADC_MIN_SAMPLE_RATE;
 #define DAC_WAVEFORM    WAVEFORM_SINUS
 int g_dacMinFreq = DAC_MIN_FREQ;
 int g_dacMaxFreq = DAC_MAX_FREQ;
-int g_dacFreq = g_dacMinFreq;
+uint g_dacFreq = g_dacMinFreq;
 
 #define TRIGGER_MIN_VAL    0
 #define TRIGGER_MAX_VAL    ANALOG_MAX_VAL
 int g_triggerVal = TRIGGER_MAX_VAL / 2;
-
 int g_zoom = 1;
+
+uint16_t g_samples0[TFT_WIDTH];
+uint16_t g_samples1[TFT_WIDTH];
+
+uint16_t *g_samples = g_samples0;
+
 
 AdcDma::TriggerMode g_triggerMode = AdcDma::RisingEdge;
 
@@ -60,6 +64,15 @@ GenSigDma *g_genSigDma = NULL;
 AdcDma *g_adcDma = NULL;
 
 SerialCommand SCmd;
+
+// Colors definitions
+#define BG_COLOR         255, 255, 255
+#define GRAPH_COLOR      255,   0,   0
+#define TRIGGER_COLOR    0  , 255,   0
+#define TEXT_COLOR       0  ,   0, 255
+
+// Y position for texts
+#define TEXT_Y_OFFSET 2
 
 // Tft screen instance
 TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
@@ -214,7 +227,7 @@ void triggerModeHandler()
 void mapBufferValues(uint16_t *buf, int count)
 {
 	for (int iSample = 0; iSample < count; iSample++) {
-		buf[iSample] = map(buf[iSample] & 0x0FFF, 0, SAMPLE_MAX_VAL, TFT_HEIGHT - 1, 0);
+		g_samples[iSample] = map(buf[iSample], 0, SAMPLE_MAX_VAL, TFT_HEIGHT - 1, 0);
 	}
 }
 
@@ -274,46 +287,140 @@ void updateAdcSampleRate(bool bForceUpdate)
 	}
 }
 
-int g_drawLastX = 0;
-int g_drawLastY = 0;
+void swapSampleBuffer()
+{
+	if (g_samples == g_samples0)
+		g_samples = g_samples1;
+	else
+		g_samples = g_samples0;
+}
+
+uint16_t *getNewSamples()
+{
+	return g_samples;
+}
+
+uint16_t *getOldSamples()
+{
+	if (g_samples == g_samples0)
+		return g_samples1;
+	else
+		return g_samples0;
+}
 
 void drawBegin()
 {
-	g_drawLastX = 0;
-	g_drawLastY = 0;
+	char textBuf[40];
 
-	TFTscreen.background(255, 255, 255);
+	static int s_prevTriggerVal = -1;
+	static uint s_prevDacFreq = -1;
+	static uint s_prevSampleRate = 0;
 
-	// draw in red
-	TFTscreen.fill(255, 0, 0);
-	TFTscreen.stroke(255, 0, 0);
+	static uint32_t s_prevDrawTime = 0;
+
+	while (millis() - s_prevDrawTime < 50) {
+	}
+	s_prevDrawTime = millis();
+
+	// Redraw trigger line (always since signal may overwrite it)
+	for (int i = 0; i < 2; i++) {
+		int y;
+		if (i == 0) {
+			// Erase
+			TFTscreen.stroke(BG_COLOR);
+			y = s_prevTriggerVal;
+		}
+		else {
+			// Draw
+			TFTscreen.stroke(TRIGGER_COLOR);
+			y = g_triggerVal;
+		}
+		y = map(y, 0, ANALOG_MAX_VAL, TFT_HEIGHT - 1, 0);
+		TFTscreen.line(0, y, TFT_WIDTH, y);
+	}
+
+	// Print signal freq
+	if (s_prevDacFreq != g_dacFreq) {
+		for (int i = 0; i < 2; i++) {
+			String s;
+			s = String("Fq:");
+			if (i == 0) {
+				// erase prev value
+				s += String(s_prevDacFreq);
+				TFTscreen.stroke(BG_COLOR);
+			}
+			else {
+				// draw new value
+				s += String(g_dacFreq);
+				TFTscreen.stroke(TEXT_COLOR);
+			}
+			s += String("Hz");
+			s.toCharArray(textBuf, 15);
+			TFTscreen.text(textBuf, 10, TEXT_Y_OFFSET);
+		}
+	}
+
+	// Print sample rate
+	if (s_prevSampleRate != g_adcSampleRate) {
+		for (int i = 0; i < 2; i++) {
+			String s = String("SR:");
+			if (i == 0) {
+				// erase prev value
+				s += String(s_prevSampleRate);
+				TFTscreen.stroke(BG_COLOR);
+			}
+			else {
+				// draw new value
+				s += String(g_adcSampleRate);
+				TFTscreen.stroke(TEXT_COLOR);
+			}
+			s += String("Hz");
+			s.toCharArray(textBuf, 15);
+			TFTscreen.text(textBuf, TFT_WIDTH / 2, TEXT_Y_OFFSET);
+		}
+	}
+
+	s_prevDacFreq = g_dacFreq;
+	s_prevTriggerVal = g_triggerVal;
+	s_prevSampleRate = g_adcSampleRate;
 }
 
-void drawSamples(uint16_t *samples, int count)
+void drawSamples()
 {
-	if (g_drawLastX == 0) {
-		g_drawLastY = samples[0];
+	static int s_prevZoom = 1;
+	uint16_t *samples;
+
+	for (int i = 0; i < 2; i++) {
+		int zoom;
+		if (i == 0) {
+			// erase old samples
+			TFTscreen.stroke(BG_COLOR);
+			samples = getOldSamples();
+			zoom = s_prevZoom;
+		}
+		else {
+			// draw new samples
+			TFTscreen.stroke(GRAPH_COLOR);
+			samples = getNewSamples();
+			zoom = g_zoom;
+		}
+
+		int lastX = 0;
+		int lastY = samples[0];
+
+		for (int iSample = 1; iSample < TFT_WIDTH / zoom; iSample++) {
+			uint16_t sample = samples[iSample];
+			TFTscreen.line(lastX, lastY, lastX + zoom, sample);
+			lastX += zoom;
+			lastY = sample;
+		}
 	}
 
-	for (int iSample = 1; iSample < count / g_zoom; iSample++) {
-		TFTscreen.line(g_drawLastX, g_drawLastY, g_drawLastX + g_zoom, samples[iSample]);
-		g_drawLastX += g_zoom;
-		g_drawLastY = samples[iSample];
-
-		if (g_drawLastX >= TFT_WIDTH)
-			return;
-	}
+	s_prevZoom = g_zoom;
 }
 
 void drawEnd()
 {
-	// draw in green
-	TFTscreen.fill(0, 255, 0);
-	TFTscreen.stroke(0, 255, 0);
-
-	int y = map(g_triggerVal, 0, ANALOG_MAX_VAL, TFT_HEIGHT - 1, 0);
-
-	TFTscreen.line(0, y, TFT_WIDTH, y);
 }
 
 void loop()
@@ -346,7 +453,6 @@ void loop()
 	while (!g_adcDma->DidTriggerComplete(&bTriggerTimeout)){}
 	uint16_t *triggerBufAddress = NULL;
 	int triggerSampleIndex = 0;
-
 	bool bDrawnTrigger = false;
 
 	if (!bTriggerTimeout) {
@@ -360,7 +466,8 @@ void loop()
 
 	int drawnSamples = 0;
 
-	drawBegin();
+	// Use new buffer before sampling
+	swapSampleBuffer();
 
 	while (drawnSamples < TFT_WIDTH) {
 		uint16_t *buf;
@@ -387,13 +494,17 @@ void loop()
 			count -= triggerSampleIndex;
 		}
 
+		if (drawnSamples + count > TFT_WIDTH)
+			count = TFT_WIDTH - drawnSamples;
+
 		adcdma_print("Will map %d values on buffer 0x%08x\n", count, buf);
 		mapBufferValues(buf, count);
-		drawSamples(buf, count);
 
 		drawnSamples += count;
 	}
 
+	drawBegin();
+	drawSamples();
 	drawEnd();
 
 	// Read remaining buffers
