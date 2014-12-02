@@ -29,7 +29,7 @@
 
 // Tests show that ADC doesn't sample well with freq >= 1830000 Hz.
 #define ADC_MIN_SAMPLE_RATE  100000
-#define ADC_MAX_SAMPLE_RATE 1830000
+#define ADC_MAX_SAMPLE_RATE 1825000
 uint g_adcMinSampleRate = ADC_MIN_SAMPLE_RATE;
 uint g_adcMaxSampleRate = ADC_MAX_SAMPLE_RATE;
 uint g_adcSampleRate = ADC_MIN_SAMPLE_RATE;
@@ -45,6 +45,10 @@ GenSigDma::WaveForm g_dacWaveForm = GenSigDma::WaveFormSinus;
 #define TRIGGER_MAX_VAL    ANALOG_MAX_VAL
 int g_triggerVal = TRIGGER_MAX_VAL / 2;
 int g_zoom = 1;
+
+#define ERASE_MODE_ALL 0	// Erase all samples, then draw all samples
+#define ERASE_MODE_ALT 1	// Alternate erasing and drawing samples
+int g_eraseMode = ERASE_MODE_ALT;
 
 uint16_t g_samples0[TFT_WIDTH];
 uint16_t g_samples1[TFT_WIDTH];
@@ -70,9 +74,22 @@ SerialCommand SCmd;
 #define GRAPH_COLOR      255,   0,   0
 #define TRIGGER_COLOR    0  , 255,   0
 #define TEXT_COLOR       0  ,   0, 255
+#define VGRID_COLOR      170, 170, 170
+#define HGRID_COLOR      170, 170, 170
+
+// Length of trigger arrow
+#define TRIGGER_ARROW_LEN		8
+#define TRIGGER_ARROW_HEIGHT	3
 
 // Y position for texts
 #define TEXT_Y_OFFSET 2
+
+// Grid definitions
+#define VGRID_START		(TFT_WIDTH / 2)		// x-axis position of the first vertical line
+#define VGRID_INTERVAL  50					// distance between vertical lines
+
+#define HGRID_START     (TFT_HEIGHT / 2)	// y-axis position of the first horizontal line
+#define HGRID_INTERVAL  VGRID_INTERVAL		// distance between horizontal lines
 
 // Tft screen instance
 TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
@@ -86,6 +103,7 @@ void setup() {
 	SCmd.addCommand("sr", sampleRateRangeHandler);
 	SCmd.addCommand("zoom", zoomHandler);
 	SCmd.addCommand("form", formHandler);
+	SCmd.addCommand("ermode", eraseModeHandler);
 	SCmd.addDefaultHandler(defaultHandler);
 
 	//while (!Serial.available()) {}
@@ -239,6 +257,38 @@ void triggerModeHandler()
 	}
 }
 
+void eraseModeHandler()
+{
+	char * strMode = SCmd.next();
+
+	if (strMode == NULL) {
+		switch (g_eraseMode) {
+		case ERASE_MODE_ALL :
+			Serial.println("all");
+			break;
+
+		case ERASE_MODE_ALT :
+			Serial.println("alt");
+			break;
+
+		default :
+			break;
+
+		return;
+		}
+	}
+
+	if (strcmp(strMode, "all") == 0) {
+		g_eraseMode = ERASE_MODE_ALL;
+	}
+	else if (strcmp(strMode, "alt") == 0) {
+		g_eraseMode = ERASE_MODE_ALT;
+	}
+	else {
+		return;
+	}
+}
+
 void formHandler()
 {
 	char * strForm = SCmd.next();
@@ -367,17 +417,22 @@ uint16_t *getOldSamples()
 
 void drawBegin()
 {
+	static uint32_t s_prevDrawTime = 0;
+
+	while (millis() - s_prevDrawTime < 50) {
+	}
+	s_prevDrawTime = millis();
+}
+
+void drawTexts()
+{
 	char textBuf[40];
 
 	static int s_prevTriggerVal = -1;
 	static uint s_prevDacFreq = -1;
 	static uint s_prevSampleRate = 0;
 
-	static uint32_t s_prevDrawTime = 0;
-
-	while (millis() - s_prevDrawTime < 50) {
-	}
-	s_prevDrawTime = millis();
+	bool bForceDrawText = false;
 
 	// Redraw trigger line (always since signal may overwrite it)
 	for (int i = 0; i < 2; i++) {
@@ -393,11 +448,13 @@ void drawBegin()
 			y = g_triggerVal;
 		}
 		y = map(y, 0, ANALOG_MAX_VAL, TFT_HEIGHT - 1, 0);
-		TFTscreen.line(0, y, TFT_WIDTH, y);
+		TFTscreen.line(0, y, TRIGGER_ARROW_LEN, y);
+		TFTscreen.line(TRIGGER_ARROW_LEN, y, TRIGGER_ARROW_LEN - TRIGGER_ARROW_HEIGHT, y - TRIGGER_ARROW_HEIGHT);
+		TFTscreen.line(TRIGGER_ARROW_LEN, y, TRIGGER_ARROW_LEN - TRIGGER_ARROW_HEIGHT, y + TRIGGER_ARROW_HEIGHT);
 	}
 
 	// Print signal freq
-	if (s_prevDacFreq != g_dacFreq) {
+	if ( (s_prevDacFreq != g_dacFreq) || bForceDrawText ) {
 		for (int i = 0; i < 2; i++) {
 			String s;
 			s = String("Fq:");
@@ -418,7 +475,7 @@ void drawBegin()
 	}
 
 	// Print sample rate
-	if (s_prevSampleRate != g_adcSampleRate) {
+	if ( (s_prevSampleRate != g_adcSampleRate) || bForceDrawText ) {
 		for (int i = 0; i < 2; i++) {
 			String s = String("SR:");
 			if (i == 0) {
@@ -442,49 +499,127 @@ void drawBegin()
 	s_prevSampleRate = g_adcSampleRate;
 }
 
+inline bool isPointOnGrid(int x, int y)
+{
+	if ( (x % VGRID_INTERVAL) == VGRID_START)
+		return true;
+
+	if ( (y % HGRID_INTERVAL) == HGRID_START)
+		return true;
+
+	return false;
+}
+
+void drawGrid()
+{
+	// Draw vertival grid (vertical lines)
+	TFTscreen.stroke(VGRID_COLOR);
+	int xStart = VGRID_START;
+	int xOffset = 0;
+	while ( (xStart + xOffset < TFT_WIDTH) || (xStart - xOffset > 0) ) {
+		TFTscreen.line(xStart + xOffset, 20, xStart + xOffset, TFT_HEIGHT);
+		TFTscreen.line(xStart - xOffset, 20, xStart - xOffset, TFT_HEIGHT);
+		xOffset += VGRID_INTERVAL;
+	}
+
+	// Draw horizontal grid (horizontal lines)
+	TFTscreen.stroke(HGRID_COLOR);
+	int yStart = HGRID_START;
+	int yOffset = 0;
+	while ( (yStart + yOffset < TFT_HEIGHT) || (yStart - yOffset > 0) ) {
+		TFTscreen.line(0,  yStart + yOffset, TFT_WIDTH, yStart + yOffset);
+		TFTscreen.line(0,  yStart - yOffset, TFT_WIDTH, yStart - yOffset);
+		yOffset += HGRID_INTERVAL;
+	}
+}
+
 void drawSamples()
 {
 	static int s_prevZoom = 1;
-	uint16_t *samples;
 
-	for (int i = 0; i < 2; i++) {
-		int zoom;
-		if (i == 0) {
-			// erase old samples
-			TFTscreen.stroke(BG_COLOR);
-			samples = getOldSamples();
-			zoom = s_prevZoom;
-		}
-		else {
-			// draw new samples
-			TFTscreen.stroke(GRAPH_COLOR);
-			samples = getNewSamples();
-			zoom = g_zoom;
-		}
+	if (g_eraseMode == ERASE_MODE_ALT) {
 
-		int lastX = 0;
-		int lastY = samples[0];
+		uint16_t *oldSamples = getOldSamples();
+		uint16_t *newSamples = getNewSamples();
 
 		int iSample = 1;
+
+		int lastXDraw = 0;
+		int lastYDraw = newSamples[0];
+
+		// Erase first old sample
+		TFTscreen.stroke(BG_COLOR);
+		TFTscreen.line(0, oldSamples[0], s_prevZoom, oldSamples[1]);
+		int lastXErase = s_prevZoom;
+		int lastYErase = oldSamples[1];
+
+		// Erase sample iSample+1 while drawing sample iSample
+		// otherwise, new drawn line could be overwritten by erased line
 		for (;;) {
-			uint16_t sample = samples[iSample];
-			TFTscreen.line(lastX, lastY, lastX + zoom, sample);
-			lastX += zoom;
-			lastY = sample;
+			uint16_t sample;
+
+			// Erase old sample
+			if (iSample + 1 < TFT_WIDTH) {
+				sample = oldSamples[iSample + 1];
+				TFTscreen.stroke(BG_COLOR);
+				TFTscreen.line(lastXErase, lastYErase, lastXErase + s_prevZoom, sample);
+				lastXErase += s_prevZoom;
+				lastYErase = sample;
+			}
+
+			// Draw new sample
+			sample = newSamples[iSample];
+			TFTscreen.stroke(GRAPH_COLOR);
+			TFTscreen.line(lastXDraw, lastYDraw, lastXDraw + g_zoom, sample);
+			lastXDraw += g_zoom;
+			lastYDraw = sample;
+
 			iSample++;
+
 			// Need this for zoom
 			if (iSample >= TFT_WIDTH)
 				break;
-			if (lastX >= TFT_WIDTH)
+			if (lastXErase >= TFT_WIDTH && lastXDraw >= TFT_WIDTH)
 				break;
+		}
+	}
+	else {
+		uint16_t *samples;
+		for (int i = 0; i < 2; i++) {
+			int zoom;
+			if (i == 0) {
+				// erase old samples
+				TFTscreen.stroke(BG_COLOR);
+				samples = getOldSamples();
+				zoom = s_prevZoom;
+			}
+			else {
+				// draw new samples
+				TFTscreen.stroke(GRAPH_COLOR);
+				samples = getNewSamples();
+				zoom = g_zoom;
+			}
+
+			int lastX = 0;
+			int lastY = samples[0];
+
+			int iSample = 1;
+			for (;;) {
+				uint16_t sample = samples[iSample];
+				TFTscreen.line(lastX, lastY, lastX + zoom, sample);
+				lastX += zoom;
+				lastY = sample;
+				iSample++;
+				// Need this for zoom
+				if (iSample >= TFT_WIDTH)
+					break;
+				if (lastX >= TFT_WIDTH)
+					break;
+			}
 		}
 	}
 
 	s_prevZoom = g_zoom;
-}
-
-void drawEnd()
-{
 }
 
 void loop()
@@ -569,7 +704,8 @@ void loop()
 
 	drawBegin();
 	drawSamples();
-	drawEnd();
+	drawGrid();
+	drawTexts();
 
 	// Read remaining buffers
 	while (g_adcDma->GetReadBuffer()) {
