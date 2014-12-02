@@ -714,7 +714,7 @@ void loop()
 		drawnSamples += count;
 	}
 
-	drawBegin();
+	//drawBegin();
 	drawTriggerArrow();
 	drawSamples();
 	drawGrid();
