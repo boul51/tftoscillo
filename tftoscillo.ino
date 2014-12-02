@@ -72,7 +72,7 @@ SerialCommand SCmd;
 // Colors definitions
 #define BG_COLOR         255, 255, 255
 #define GRAPH_COLOR      255,   0,   0
-#define TRIGGER_COLOR    0  , 255,   0
+#define TRIGGER_COLOR    50 , 196,  10
 #define TEXT_COLOR       0  ,   0, 255
 #define VGRID_COLOR      170, 170, 170
 #define HGRID_COLOR      170, 170, 170
@@ -424,15 +424,9 @@ void drawBegin()
 	s_prevDrawTime = millis();
 }
 
-void drawTexts()
+void drawTriggerArrow()
 {
-	char textBuf[40];
-
 	static int s_prevTriggerVal = -1;
-	static uint s_prevDacFreq = -1;
-	static uint s_prevSampleRate = 0;
-
-	bool bForceDrawText = false;
 
 	// Redraw trigger line (always since signal may overwrite it)
 	for (int i = 0; i < 2; i++) {
@@ -449,9 +443,28 @@ void drawTexts()
 		}
 		y = map(y, 0, ANALOG_MAX_VAL, TFT_HEIGHT - 1, 0);
 		TFTscreen.line(0, y, TRIGGER_ARROW_LEN, y);
-		TFTscreen.line(TRIGGER_ARROW_LEN, y, TRIGGER_ARROW_LEN - TRIGGER_ARROW_HEIGHT, y - TRIGGER_ARROW_HEIGHT);
-		TFTscreen.line(TRIGGER_ARROW_LEN, y, TRIGGER_ARROW_LEN - TRIGGER_ARROW_HEIGHT, y + TRIGGER_ARROW_HEIGHT);
+
+		/* Use this to draw arrow towards right */
+		// TFTscreen.line(TRIGGER_ARROW_LEN, y, TRIGGER_ARROW_LEN - TRIGGER_ARROW_HEIGHT, y - TRIGGER_ARROW_HEIGHT);
+		// TFTscreen.line(TRIGGER_ARROW_LEN, y, TRIGGER_ARROW_LEN - TRIGGER_ARROW_HEIGHT, y + TRIGGER_ARROW_HEIGHT);
+
+		/* Use this to draw arrow towards left */
+
+		TFTscreen.line(0, y, TRIGGER_ARROW_HEIGHT, y - TRIGGER_ARROW_HEIGHT);
+		TFTscreen.line(0, y, TRIGGER_ARROW_HEIGHT, y + TRIGGER_ARROW_HEIGHT);
 	}
+
+	s_prevTriggerVal = g_triggerVal;
+}
+
+void drawTexts()
+{
+	char textBuf[40];
+
+	static uint s_prevDacFreq = -1;
+	static uint s_prevSampleRate = 0;
+
+	bool bForceDrawText = false;
 
 	// Print signal freq
 	if ( (s_prevDacFreq != g_dacFreq) || bForceDrawText ) {
@@ -495,7 +508,6 @@ void drawTexts()
 	}
 
 	s_prevDacFreq = g_dacFreq;
-	s_prevTriggerVal = g_triggerVal;
 	s_prevSampleRate = g_adcSampleRate;
 }
 
@@ -703,6 +715,7 @@ void loop()
 	}
 
 	drawBegin();
+	drawTriggerArrow();
 	drawSamples();
 	drawGrid();
 	drawTexts();
