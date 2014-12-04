@@ -90,6 +90,12 @@ bool GenSigDma::Start()
 	if (m_started)
 		return false;
 
+	// If no valid waveform was set, abort
+	if (m_waveform == WaveFormNone) {
+		p("%s: No valid waveform is defined !\r\n", __FUNCTION__);
+		return false;
+	}
+
 	if (!StartDma())
 		return false;
 
@@ -114,11 +120,11 @@ bool GenSigDma::Stop()
 bool GenSigDma::SetTimerChannel(int timerChannel)
 {
 	if (timerChannel < 0 || timerChannel > DAC_DMA_MAX_TIMER_CHANNEL) {
-		p("GenSigDma::SetTimerChannel: Invalid channel %d\n", timerChannel);
+		p("GenSigDma::SetTimerChannel: Invalid channel %d\r\n", timerChannel);
 	}
 
 	if (m_started) {
-		p("GenSigDma::SetTimerChannel: Started, won't do anything\n");
+		p("GenSigDma::SetTimerChannel: Started, won't do anything\r\n");
 		return false;
 	}
 
@@ -130,17 +136,17 @@ bool GenSigDma::SetTimerChannel(int timerChannel)
 bool GenSigDma::SetWaveForm(WaveForm wf, float freq, float *pActualFreq)
 {
 	if (wf <= WaveFormMin || wf >= WaveFormMax) {
-		p("GenSigDma::SetWaveForm: Invalid waveform !\n");
+		p("GenSigDma::SetWaveForm: Invalid waveform !\r\n");
 		return false;
 	}
 
 	if (freq == 0.) {
-		p("GenSigDma::SetWaveForm: Invalid frequency 0.0 !\n");
+		p("GenSigDma::SetWaveForm: Invalid frequency 0.0 !\r\n");
 		return false;
 	}
 
 	if (m_started) {
-		p("GenSigDma::SetWaveForm: Already running !\n");
+		p("GenSigDma::SetWaveForm: Already running !\r\n");
 		return false;
 	}
 
@@ -155,7 +161,7 @@ bool GenSigDma::SetWaveForm(WaveForm wf, float freq, float *pActualFreq)
 	m_waveform = wf;
 
 	if (!SetupTimer()) {
-		p("GenSigDma::SetupTimer: Failed in SetupTimer !\n");
+		p("GenSigDma::SetupTimer: Failed in SetupTimer !\r\n");
 		return false;
 	}
 
@@ -173,7 +179,7 @@ bool GenSigDma::SetWaveForm(WaveForm wf, float freq, float *pActualFreq)
 		GenTriangle();
 		break;
 	default :
-		p("%s: Invalid waveform !\n", __FUNCTION__);
+		p("%s: Invalid waveform !\r\n", __FUNCTION__);
 		return false;
 	}
 
@@ -187,12 +193,12 @@ bool GenSigDma::SetWaveForm(WaveForm wf, float freq, float *pActualFreq)
 bool GenSigDma::SetMaxSampleRate(int rate)
 {
 	if (m_started) {
-		p("GenSigDma::SetMaxSampleRate: Already running !\n");
+		p("GenSigDma::SetMaxSampleRate: Already running !\r\n");
 		return false;
 	}
 
 	if (rate > GENSIGDMA_MAX_SAMPLE_RATE) {
-		p("Can't exceed sample rate %d !\n", GENSIGDMA_MAX_SAMPLE_RATE);
+		p("Can't exceed sample rate %d !\r\n", GENSIGDMA_MAX_SAMPLE_RATE);
 		return false;
 	}
 
@@ -270,14 +276,14 @@ bool GenSigDma::SetupTimer()
 	m_periodsPerBuffer = m_samplesPerBuffer / m_freqMult;
 	m_samplesPerPeriod = m_samplesPerBuffer / m_periodsPerBuffer;
 
-	p("Setting up timer with parameters:\n");
-	p(" - Timer channel %d\n", m_timerChannel);
-	p(" - Freq %s\n", F2S(m_freq));
-	p(" - Sample rate %d\n", m_sampleRate);
-	p(" - Div %d\n", prescaler.div);
-	p(" - RC %d\n", RC);
-	p(" - Samples per buffer %d\n", m_samplesPerBuffer);
-	p(" - FreqMult %d\n", int((float)m_sampleRate / m_freq));
+	p("Setting up timer with parameters:\r\n");
+	p(" - Timer channel %d\r\n", m_timerChannel);
+	p(" - Freq %s\r\n", F2S(m_freq));
+	p(" - Sample rate %d\r\n", m_sampleRate);
+	p(" - Div %d\r\n", prescaler.div);
+	p(" - RC %d\r\n", RC);
+	p(" - Samples per buffer %d\r\n", m_samplesPerBuffer);
+	p(" - FreqMult %d\r\n", int((float)m_sampleRate / m_freq));
 
 	// And write data to timer controller
 
@@ -349,7 +355,7 @@ bool GenSigDma::SetupDacc() {
 
 bool GenSigDma::SetupDma()
 {
-	p("GenSigDma::SetupDma TODO: Set next pointer register !\n");
+	p("GenSigDma::SetupDma TODO: Set next pointer register !\r\n");
 
 	DACC->DACC_TPR = (uint32_t)&m_buffers[0][0];
 	DACC->DACC_TCR = m_samplesPerBuffer;
@@ -519,7 +525,7 @@ bool GenSigDma::GenSin()
 	DuplicateBuffers();
 
 	int tEnd = micros();
-	p("Generated sinus waveform in %d us\n", tEnd - tStart);
+	p("Generated sinus waveform in %d us\r\n", tEnd - tStart);
 
 	return true;
 }
@@ -542,7 +548,7 @@ void GenSigDma::DisplayStats(int sec)
 {
 	int samples = m_stats.lastSamplesCount;
 	int irqs = m_stats.lastIrqsCount;
-	p("Sec: %d, samples sent: %d, irqs: %d\n", sec, samples, irqs);
+	p("Sec: %d, samples sent: %d, irqs: %d\r\n", sec, samples, irqs);
 }
 
 void GenSigDma::Loop(bool bResetStats)

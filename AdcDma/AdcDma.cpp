@@ -100,7 +100,7 @@ void AdcDma::findTriggerSample()
 		bufLoops++;
 	}
 
-	p("%s: did not find trigger sample !\n", __FUNCTION__);
+	p("%s: did not find trigger sample !\r\n", __FUNCTION__);
 
 	return;
 }
@@ -128,12 +128,12 @@ bool AdcDma::SetBuffers(int bufCount, int bufSize)
 bool AdcDma::SetTimerChannel(int timerChannel)
 {
 	if (timerChannel > ADC_DMA_MAX_TIMER_CHANNEL) {
-		p("%s: invalid channel %d !\n", __FUNCTION__, timerChannel);
+		p("%s: invalid channel %d !\r\n", __FUNCTION__, timerChannel);
 		return false;
 	}
 
 	if (m_captureState != CaptureStateStopped) {
-		p("%s: can't set timer channel while running !\n", __FUNCTION__);
+		p("%s: can't set timer channel while running !\r\n", __FUNCTION__);
 		return false;
 	}
 
@@ -152,7 +152,7 @@ bool AdcDma::SetTimerChannel(int timerChannel)
 		trgSel = ADC_TRIG_TIO_CH_2;
 		break;
 	default :
-		p("%s: invalid timer channel %d !\n", m_timerChannel);
+		p("%s: invalid timer channel %d !\r\n", m_timerChannel);
 		return false;
 	}
 
@@ -251,7 +251,7 @@ bool AdcDma::SetTrigger(int value, TriggerMode mode, int triggerChannel, int tri
 		m_triggerTimeoutMaxInts = 0;
 	}
 
-	p("Calculated m_triggerTimeoutMaxInts %d\n", m_triggerTimeoutMaxInts);
+	p("Calculated m_triggerTimeoutMaxInts %d\r\n", m_triggerTimeoutMaxInts);
 
 	uint16_t v = (uint16_t)value;
 
@@ -277,7 +277,7 @@ bool AdcDma::TriggerEnable(bool bEnable)
 
 void AdcDma::triggerSetState(TriggerState state)
 {
-	p("Trigger state change %s -> %s%s\n", StrTriggerState[m_triggerState], StrTriggerState[state], m_bTriggerTimeout ? " (timeout)" : "");
+	p("Trigger state change %s -> %s%s\r\n", StrTriggerState[m_triggerState], StrTriggerState[state], m_bTriggerTimeout ? " (timeout)" : "");
 	m_triggerState = state;
 }
 
@@ -374,7 +374,7 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 		break;
 
 	default :
-		p("%s: Invalid current state !\n", __FUNCTION__);
+		p("%s: Invalid current state !\r\n", __FUNCTION__);
 		break;
 	}
 
@@ -382,7 +382,7 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 
 _unhandledEvent :
 
-	p("%s: Unhandled event from state %s\n", __FUNCTION__, StrTriggerState[m_triggerState]);
+	p("%s: Unhandled event from state %s\r\n", __FUNCTION__, StrTriggerState[m_triggerState]);
 	return;
 }
 
@@ -409,7 +409,7 @@ void AdcDma::triggerEnterEnabled(TriggerEvent *event)
 		cmpMode = ADC_EMR_CMPMODE_LOW;
 		break;
 	default :
-		p("%s: invalid trigger mode !\n", __FUNCTION__);
+		p("%s: invalid trigger mode !\r\n", __FUNCTION__);
 		return;
 	}
 
@@ -483,7 +483,7 @@ void AdcDma::triggerEnterDone(TriggerEvent *event)
 
 void AdcDma::triggerEnterReading(TriggerEvent *event)
 {
-	p("%s++\n", __FUNCTION__);
+	p("%s++\r\n", __FUNCTION__);
 	triggerSetState(TriggerStateReading);
 }
 
@@ -500,7 +500,7 @@ bool AdcDma::AllocateBuffers(int bufCount, int bufSize, bool bForceAllocate)
 	// Check parameters:
 	if ( (bufCount == 0) ||
 		 (bufSize  == 0) ) {
-		p("AdcDma::AllocateBuffers: Invalid parameters !\n");
+		p("AdcDma::AllocateBuffers: Invalid parameters !\r\n");
 		return false;
 	}
 
@@ -510,11 +510,11 @@ bool AdcDma::AllocateBuffers(int bufCount, int bufSize, bool bForceAllocate)
 	for (int iBuf = 0; iBuf < m_bufCount; iBuf++) {
 		m_buffers[iBuf] = (uint16_t *)malloc(m_bufSize * sizeof(uint16_t));
 		if (m_buffers[iBuf] == NULL) {
-			p("AdcDma::AllocateBuffers: Failed allocating buffer %d, size %d !\n", iBuf, m_bufSize);
+			p("AdcDma::AllocateBuffers: Failed allocating buffer %d, size %d !\r\n", iBuf, m_bufSize);
 			DeleteBuffers();
 			return false;
 		}
-		p("AdcDma::AllocateBuffers: m_buffers[%d]: 0x%08x\n", iBuf, m_buffers[iBuf]);
+		p("AdcDma::AllocateBuffers: m_buffers[%d]: 0x%08x\r\n", iBuf, m_buffers[iBuf]);
 	}
 
 	return true;
@@ -615,18 +615,18 @@ bool AdcDma::ConfigureTimer()
 	}
 
 	if (!bFound) {
-		p("No prescaler found !\n");
+		p("No prescaler found !\r\n");
 		return false;
 	}
 
 	// We got prescaler, now calculate value for rc
 	int RC = MCLK / (m_sampleRate * prescaler.div);
 
-	p("AdcDma: Setting up timer with parameters:\n");
-	p(" - Timer channel %d\n", m_timerChannel);
-	p(" - Sample rate %d\n", m_sampleRate);
-	p(" - Div %d\n", prescaler.div);
-	p(" - RC %d\n", RC);
+	p("AdcDma: Setting up timer with parameters:\r\n");
+	p(" - Timer channel %d\r\n", m_timerChannel);
+	p(" - Sample rate %d\r\n", m_sampleRate);
+	p(" - Div %d\r\n", prescaler.div);
+	p(" - RC %d\r\n", RC);
 
 	// And write data to timer controller
 
@@ -766,7 +766,7 @@ uint16_t *AdcDma::GetReadBuffer()
 	case TriggerStateDisabled :
 	case TriggerStateReading :
 	  {
-		//p("Write index %d, read index %d\n", m_writeBufIndex, m_readBufIndex);
+		//p("Write index %d, read index %d\r\n", m_writeBufIndex, m_readBufIndex);
 		if (m_readBufIndex != m_writeBufIndex) {
 			buf = m_buffers[m_readBufIndex];
 		}
@@ -783,7 +783,7 @@ uint16_t *AdcDma::GetReadBuffer()
 	  }
 	default :
 	  {
-		p("%s: Can't get read buffer in state %s\n", __FUNCTION__, StrTriggerState[m_triggerState]);
+		p("%s: Can't get read buffer in state %s\r\n", __FUNCTION__, StrTriggerState[m_triggerState]);
 		break;
 	  }
 	}
@@ -803,7 +803,7 @@ bool AdcDma::AdvanceReadBuffer()
 		triggerUpdateState(&event);
 	}
 
-	//p("Advanced readBuffer, m_readBufIndex is now %d\n", m_readBufIndex);
+	//p("Advanced readBuffer, m_readBufIndex is now %d\r\n", m_readBufIndex);
 
 	return true;
 }
@@ -812,7 +812,7 @@ bool AdcDma::AdvanceWriteBuffer()
 {
 	// Use + 2 here since we give pointer and next pointer to DMA controller
 	if ( ((m_writeBufIndex + 2) % m_bufCount) == m_readBufIndex) {
-		//p("WriteBufIndex: Would overwrite non read data (R %d, W %d)\n", m_readBufIndex, m_writeBufIndex);
+		//p("WriteBufIndex: Would overwrite non read data (R %d, W %d)\r\n", m_readBufIndex, m_writeBufIndex);
 		return false;
 	}
 
@@ -820,9 +820,9 @@ bool AdcDma::AdvanceWriteBuffer()
 	if (m_writeBufIndex == m_bufCount)
 		m_writeBufIndex = 0;
 
-	//p("Advanced writeBuffer, m_writeBufIndex is now %d\n", m_writeBufIndex);
+	//p("Advanced writeBuffer, m_writeBufIndex is now %d\r\n", m_writeBufIndex);
 
-	//p("AdcDma::AdvanceWriteBuffer: Setting next RX pointer %d (0x%08x)\n", m_writeBufIndex, (uint32_t)m_buffers[m_writeBufIndex]);
+	//p("AdcDma::AdvanceWriteBuffer: Setting next RX pointer %d (0x%08x)\r\n", m_writeBufIndex, (uint32_t)m_buffers[m_writeBufIndex]);
 
 	// Current write buffer was automatically set by DMA controller.
 	// Only update next pointer
@@ -886,7 +886,7 @@ void AdcDma::HandleInterrupt()
 	}
 
 	if (isr & ADC_ISR_ENDRX) {
-		//p("ADC_ISR_ENDRX\n");
+		//p("ADC_ISR_ENDRX\r\n");
 
 		m_triggerBufferInts++;
 
@@ -929,7 +929,7 @@ void AdcDma::HandleInterrupt()
 			break;
 
 		default :
-			p("%s: ADC_ISR_RX_BUFF is set, stopping acquisition !\n", __FUNCTION__);
+			p("%s: ADC_ISR_RX_BUFF is set, stopping acquisition !\r\n", __FUNCTION__);
 			break;
 		}
 
