@@ -3,7 +3,7 @@ CONFIG += console
 CONFIG -= app_bundle
 CONFIG -= qt
 
-SOURCES += main.c
+SOURCES += tftoscillo.ino
 
 include(deployment.pri)
 qtcAddDeployment()
@@ -13,8 +13,9 @@ OTHER_FILES += \
 
 # Obtained by running qmake -pro in arduino folder..
 
-INCLUDEPATH += ./GenSigDma \
-               ./AdcDma \
+INCLUDEPATH += /home/boul/Arduino/libraries/GenSigDma \
+               /home/boul/Arduino/libraries/AdcDma \
+	       /home/boul/Arduino/libraries/LibDbg \
                /usr/src/Arduino/build/linux/work/libraries/ArduinoSerialCommand \
                /usr/src/Arduino/build/linux/work/hardware/arduino/avr/libraries/SoftwareSerial \
                /usr/src/Arduino/build/linux/work/libraries/Audio/src \

@@ -2,6 +2,9 @@
 
 source ./prefs.mk
 
-ln -s $PWD/GenSigDma/ $ARDUINO_USER_LIBDIR/GenSigDma
-ln -s $PWD/AdcDma/ $ARDUINO_USER_LIBDIR/AdcDma
+LIBS="GenSigDma AdcDma LibDbg"
+
+for LIB in $LIBS; do
+	ln -s $PWD/$LIB/ $ARDUINO_USER_LIBDIR/$LIB
+done
 

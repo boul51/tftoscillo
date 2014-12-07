@@ -3,11 +3,6 @@
 #define _ADC_DMA_H
 
 #include <Arduino.h>
-#include <stdarg.h>
-
-// Uncomment to enable Serial debug messages
-// Increases size, and needs Serial to be initialized
-//#define ADC_DMA_DEBUG
 
 #define MCLK 84000000
 #define ADC_DMA_MAX_VAL 4095
@@ -23,7 +18,7 @@
 
 #define ADC_DMA_DEF_BUF_SIZE	1000
 
-#define ADC_DMA_DEF_BUF_COUNT	4
+#define ADC_DMA_DEF_BUF_COUNT	5
 #define ADC_DMA_MAX_BUF_COUNT   100
 
 class AdcDma
@@ -38,32 +33,31 @@ public :
 		FallingEdge,
 	};
 
-/* Private types */
-
-private :
-
 	enum CaptureState {
 		CaptureStateStopped = 0,
 		CaptureStateStarted,
 	};
 
+/* Private types */
+
+private :
+
 	enum TriggerState {
 		TriggerStateDisabled = 0,
 		TriggerStateEnabled,
+		TriggerStatePreArmed,
 		TriggerStateArmed,
 		TriggerStateCapturing,
 		TriggerStateDone,
-		TriggerStateReading,
 	};
 
 	enum TriggerEventKind {
 		TriggerEventKindEnable,
-		TriggerEventKindDisable,
+		TriggerEventKindPreBuffersFull,
 		TriggerEventKindCompareInterrupt,
 		TriggerEventKindTimeout,
 		TriggerEventKindAllBuffersFull,
-		TriggerEventKindOneBufferRead,
-		TriggerEventKindAllBuffersRead,
+		TriggerEventKindDisable,
 	};
 
 	typedef struct _TriggerEvent {
@@ -110,6 +104,9 @@ public :
 	bool GetTriggerSampleAddress(uint16_t **pBufAddress, int *pSampleIndex);
 	bool ReadSingleValue(int adcChannel, int *value);
 	bool SetBuffers(int bufCount, int bufSize);
+	bool GetNextSample(uint16_t *sample, CaptureState *state = NULL, bool *isTriggerSample = NULL);
+	AdcDma::CaptureState GetCaptureState();
+	bool SetTriggerPreSamplesCount(int triggerPreSamplesCount);
 private :
 
 	AdcDma();
@@ -118,8 +115,14 @@ private :
 	uint16_t *m_buffers[ADC_DMA_MAX_BUF_COUNT];
 	int m_bufCount;
 	int m_bufSize;
-	int m_writeBufIndex;
-	int m_readBufIndex;
+	int m_writeBufIndex;	// Current buffer being written
+	int m_readBufIndex;		// Current buffer being read
+	int m_readSampleIndex;	// Current sample being read
+	int m_startBufIndex;	// 1st pre-buffer after triggered
+	int m_avSamples;		// number of available samples
+	int m_readBufCount;		// total number of read buffers since start()
+	int m_writeBufCount;	// total number of write buffers since start()
+
 
 	int m_adcChannels[ADC_DMA_MAX_ADC_CHANNEL];
 	int m_adcChannelsCount;
@@ -128,9 +131,16 @@ private :
 	int m_triggerTimeoutMaxInts;
 	int m_triggerBufferInts;
 	int m_triggerPreBuffersCount;
+	int m_triggerPreSamplesCount;
 	int m_triggerSampleBufIndex;
 	int m_triggerSampleIndex;
 	bool m_bTriggerTimeout;
+
+	int m_lastReadBufIndex;
+	int m_lastReadSampleIndex;
+
+	int m_lastWrittenBufIndex;
+	int m_lastWrittenSampleIndex;
 
 	bool ConfigureAdc(bool bSoftwareTrigger);
 	void StartAdc();
@@ -159,7 +169,7 @@ private :
 	void triggerEnterDisabled(TriggerEvent *event);
 	void triggerEnterArmed(TriggerEvent *event);
 	void triggerEnterDone(TriggerEvent *event);
-	void triggerEnterUserReading(TriggerEvent *event);
+	//void triggerEnterUserReading(TriggerEvent *event);
 	void triggerEnterCapturing(TriggerEvent *event);
 
 	void triggerDisableInterrupt();
@@ -174,20 +184,9 @@ private :
 	int m_sampleRate;
 	void DisableCompareMode();
 	void SetCaptureState(CaptureState captureState);
-	void triggerEnterReading(TriggerEvent *event);
+	//void triggerEnterReading(TriggerEvent *event);
 	void findTriggerSample();
+	void triggerEnterPreArmed(TriggerEvent *event);
 };
-
-// Debug declarations
-char *adcdma_floatToStr(float f, int precision);
-void adcdma_print(const char *fmt, ... );
-
-#ifndef F2S
-#define F2S(f) floatToStr(f, 4)
-#endif
-
-#ifndef p
-#define p(...) adcdma_print(__VA_ARGS__)
-#endif
 
 #endif

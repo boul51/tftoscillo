@@ -83,7 +83,7 @@ private :
 	bool  m_started;
 	int	  m_sampleRate;
 	int   m_maxSampleRate;
-	float m_freq;
+	int   m_freq;
 	WaveForm m_waveform;
 	Stats    m_stats;
 

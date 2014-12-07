@@ -211,6 +211,7 @@ bool GenSigDma::SetMaxSampleRate(int rate)
 	return true;
 }
 
+#if 1
 bool GenSigDma::SetupTimer()
 {
 	m_sampleRate = m_maxSampleRate;
@@ -315,6 +316,111 @@ bool GenSigDma::SetupTimer()
 
 	return true;
 }
+#else
+
+bool GenSigDma::SetupTimer()
+{
+	// Set default samples per period
+	m_samplesPerPeriod = 100;
+	int minSamplesPerPeriod = 4;
+
+	// For now use integer frequencies
+	int freq = floor(m_freq);
+
+	if (freq * minSamplesPerPeriod > m_maxSampleRate) {
+		p("%s: frequency is too high !\r\n", __FUNCTION__);
+		return false;
+	}
+
+	if (freq * m_samplesPerPeriod > m_maxSampleRate) {
+		p("%s: reducing samples per period\r\n", __FUNCTION__);
+		m_samplesPerPeriod = m_maxSampleRate / freq;
+	}
+
+	//freq = m_maxSampleRate / m_samplesPerPeriod;
+	m_freq = (float)freq;
+
+	m_sampleRate = m_samplesPerPeriod * (int)m_freq;
+
+	// Try to find divider / rc combination to obtain sample rate
+	PRESCALER prescaler;
+	int numPrescalers = sizeof(prescalers) / sizeof(prescalers[0]);
+
+	bool bFound = false;
+	for (int i = 0; i < numPrescalers; i++) {
+		prescaler = prescalers[i];
+		// Check if maximal RC fits
+		int sr = MCLK / prescaler.div / (int)(10000); // Max value for RC is
+		// If sr is OK, keep this prescaler
+		if (sr < m_sampleRate) {
+			bFound = true;
+			break;
+		}
+	}
+
+	if (!bFound) {
+		p("No prescaler found !");
+		return false;
+	}
+
+	// We got prescaler, now calculate value for rc
+	int RC = MCLK / (m_sampleRate * prescaler.div);
+
+	// Calculate number of samples in a buffer for one F period
+	//m_samplesPerBuffer = m_sampleRate / freq;
+	m_samplesPerBuffer = m_samplesPerPeriod;
+
+	// Maximise number of samples in a buffer,
+	// that is put several signal periods in a buffer
+	//m_samplesPerBuffer *= (DACC_DMA_BUF_SIZE / m_samplesPerBuffer);
+
+	// Update variables used by signal generators
+	m_freqMult = m_sampleRate / freq;
+	//m_periodsPerBuffer = m_samplesPerBuffer / m_freqMult;
+	m_periodsPerBuffer = 1;
+	//m_samplesPerPeriod = m_samplesPerBuffer / m_periodsPerBuffer;
+
+	p("Setting up timer with parameters:\r\n");
+	p(" - Timer channel %d\r\n", m_timerChannel);
+	p(" - Freq %s\r\n", F2S(m_freq));
+	p(" - Sample rate %d\r\n", m_sampleRate);
+	p(" - Div %d\r\n", prescaler.div);
+	p(" - RC %d\r\n", RC);
+	p(" - Samples per buffer %d\r\n", m_samplesPerBuffer);
+	p(" - FreqMult %d\r\n", int((float)m_sampleRate / freq));
+
+	// And write data to timer controller
+
+	pmc_enable_periph_clk (TC_INTERFACE_ID + 0*3+m_timerChannel) ;  // clock the TC0 channel for DACC 0
+
+	TcChannel * t = &(TC0->TC_CHANNEL)[m_timerChannel];  // pointer to TC0 registers for its channel 0
+	t->TC_CCR = TC_CCR_CLKDIS;              // disable internal clocking during setup
+	t->TC_IDR = 0xFFFFFFFF;                 // disable interrupts
+	t->TC_SR;                               // read int status reg to clear pending
+
+	t->TC_CMR = prescaler.bitMask |         // prescaler
+			TC_CMR_WAVE |					// waveform mode
+			TC_CMR_WAVSEL_UP_RC |			// count-up PWM using RC as threshold
+			TC_CMR_EEVT_XC0 |				// Set external events from XC0 (this setup TIOB as output)
+			TC_CMR_ACPA_CLEAR |
+			TC_CMR_ACPC_CLEAR |
+			TC_CMR_BCPB_CLEAR |
+			TC_CMR_BCPC_CLEAR;
+
+	t->TC_RC = RC;
+	t->TC_RA = RC/2;
+
+	t->TC_CMR = (t->TC_CMR & 0xFFF0FFFF) |
+			TC_CMR_ACPA_CLEAR |
+			TC_CMR_ACPC_SET ;  // set clear and set from RA and RC compares
+
+	t->TC_CCR = TC_CCR_CLKEN |
+			TC_CCR_SWTRG ;  // re-enable local clocking and switch to hardware trigger source.
+
+	return true;
+}
+
+#endif
 
 bool GenSigDma::SetupDacc() {
 	pmc_enable_periph_clk (DACC_INTERFACE_ID) ; // start clocking DAC
@@ -479,6 +585,15 @@ bool GenSigDma::GenTriangle()
 		}
 
 		m_buffers[0][sampleIndex] = (int)val;
+
+		p("%d: %d\r\n", sampleIndex, (int)val);
+
+		if (sampleIndex > 0) {
+			int diff = m_buffers[0][sampleIndex] - m_buffers[0][sampleIndex - 1];
+			if (diff > 100 || diff < -100) {
+				p("Gap 1 at %d (%d)\r\n", sampleIndex, diff);
+			}
+		}
 	}
 
 	DuplicatePeriods();

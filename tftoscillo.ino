@@ -1,5 +1,6 @@
 #include <GenSigDma.h>
 #include <AdcDma.h>
+#include <LibDbg.h>
 
 #include <SerialCommand.h>
 
@@ -9,6 +10,13 @@
 #include "tftoscillo.h"
 
 /**** DEFINES ****/
+// Debug definitions
+#define pf(doPrint, ...) LibDbg::pf(doPrint, __FUNCTION__, __VA_ARGS__)
+
+#define DBG_LOOP	true
+#define DBG_VERBOSE	false
+#define DBG_TEXT	false
+
 
 // TFT definitions
 #define TFT_CS_PIN   10 // Chip select pin
@@ -25,11 +33,15 @@
 #define ADC_RATE_CHANNEL    5
 #define TRIG_CHANNEL        4
 
-#define TRIGGER_TIMEOUT 100
+#define TRIGGER_TIMEOUT				100
+
+// Rate from which we switch to HS / LS mode
+#define ADC_SAMPLE_RATE_LOW_LIMIT	300
 
 // Tests show that ADC doesn't sample well with freq >= 1830000 Hz.
-#define ADC_MIN_SAMPLE_RATE  100000
-#define ADC_MAX_SAMPLE_RATE 1825000
+#define ADC_MIN_SAMPLE_RATE  100
+//#define ADC_MAX_SAMPLE_RATE 1825000
+#define ADC_MAX_SAMPLE_RATE 1000
 uint g_adcMinSampleRate = ADC_MIN_SAMPLE_RATE;
 uint g_adcMaxSampleRate = ADC_MAX_SAMPLE_RATE;
 uint g_adcSampleRate = ADC_MIN_SAMPLE_RATE;
@@ -39,12 +51,15 @@ uint g_adcSampleRate = ADC_MIN_SAMPLE_RATE;
 uint g_dacMinFreq = DAC_MIN_FREQ;
 uint g_dacMaxFreq = DAC_MAX_FREQ;
 uint g_dacFreq = g_dacMinFreq;
+uint g_dacFreqMult = 1000;
 GenSigDma::WaveForm g_dacWaveForm = GenSigDma::WaveFormSinus;
 
 #define TRIGGER_MIN_VAL    0
 #define TRIGGER_MAX_VAL    ANALOG_MAX_VAL
 int g_triggerVal = TRIGGER_MAX_VAL / 2;
 int g_zoom = 1;
+
+uint g_frameRate = 0;		// Scope fps
 
 #define ERASE_MODE_ALL 0	// Erase all samples, then draw all samples
 #define ERASE_MODE_ALT 1	// Alternate erasing and drawing samples
@@ -81,8 +96,11 @@ SerialCommand SCmd;
 #define TRIGGER_ARROW_LEN		8
 #define TRIGGER_ARROW_HEIGHT	3
 
-// Y position for texts
-#define TEXT_Y_OFFSET 2
+// Definitions for text placement and size
+#define TEXT_FONT_HEIGHT		8
+#define TEXT_FONT_WIDTH			5
+#define TEXT_Y_OFFSET			2
+#define TEXT_DOWN_Y_OFFSET		TFT_HEIGHT - TEXT_Y_OFFSET - TEXT_FONT_HEIGHT
 
 // Grid definitions
 #define VGRID_START		(TFT_WIDTH / 2)		// x-axis position of the first vertical line
@@ -99,7 +117,7 @@ void setup() {
 	Serial.begin(115200);
 
 	SCmd.addCommand("tgmode", triggerModeHandler);
-	SCmd.addCommand("fr", freqRangeHandler);
+	SCmd.addCommand("fr", freqMultHandler);
 	SCmd.addCommand("sr", sampleRateRangeHandler);
 	SCmd.addCommand("zoom", zoomHandler);
 	SCmd.addCommand("form", formHandler);
@@ -143,40 +161,19 @@ void zoomHandler()
 	g_zoom = atoi(strZoom);
 }
 
-void freqRangeHandler()
+void freqMultHandler()
 {
-	// Expecting 2 parameters, if one is given, then set a one value range
-	char * strRangeStart;
-	char * strRangeEnd;
+	// Expecting 1 parameter
+	char * strFreqMult;
 
-	int rangeStart;
-	int rangeEnd;
-
-	strRangeStart = SCmd.next();
-	if (strRangeStart == NULL) {
-		Serial.print(g_dacFreq);
-		Serial.print(" (");
-		Serial.print(g_dacMinFreq);
-		Serial.print(" - ");
-		Serial.print(g_dacMaxFreq);
-		Serial.println(")");
+	strFreqMult = SCmd.next();
+	if (strFreqMult == NULL) {
+		Serial.print(g_dacFreqMult);
+		Serial.println("");
 		return;
 	}
 
-	strRangeEnd = SCmd.next();
-	if (strRangeEnd == NULL) {
-		strRangeEnd = strRangeStart;
-	}
-
-	rangeStart = atoi(strRangeStart);
-	rangeEnd   = atoi(strRangeEnd);
-
-	if (rangeEnd < rangeStart) {
-		return;
-	}
-
-	g_dacMinFreq = rangeStart;
-	g_dacMaxFreq = rangeEnd;
+	g_dacFreqMult = atoi(strFreqMult) / 10;
 
 	updateSignalFreq(true);
 
@@ -331,10 +328,10 @@ void formHandler()
 	updateSignalFreq(true);
 }
 
-void mapBufferValues(uint16_t *buf, int count)
+void mapBufferValues(int offset, uint16_t *buf, int count)
 {
 	for (int iSample = 0; iSample < count; iSample++) {
-		g_samples[iSample] = map(buf[iSample], 0, SAMPLE_MAX_VAL, TFT_HEIGHT - 1, 0);
+		g_samples[iSample + offset] = map(buf[iSample], 0, SAMPLE_MAX_VAL, TFT_HEIGHT - 1, 0);
 	}
 }
 
@@ -343,13 +340,22 @@ void updateSignalFreq(bool bForceUpdate)
 	int potVal = 0;
 	static int prevPotVal = -1000;
 
-	float freq = 6000.;
+	//float freq = 6000.;
+	float freq = 1.;
 
 	g_adcDma->ReadSingleValue(FREQ_CHANNEL, &potVal);
 
-	if (bForceUpdate || (abs(potVal - prevPotVal) > 100) ) {
-		// Divide by 4 to avoid clipping
-		freq = map(potVal / 4, 0, ANALOG_MAX_VAL / 4, g_dacMinFreq, g_dacMaxFreq);
+	// map won't do the clipping, do it here..
+	if (potVal > POT_ANALOG_MAX_VAL)
+		potVal = POT_ANALOG_MAX_VAL;
+
+	if (bForceUpdate || (abs(potVal - prevPotVal) > 20) ) {
+		// Map int 0-1000 range, then divide by 100 to obtain a value between 0 and 10
+		//freq = (float)(map(potVal, 0, ANALOG_MAX_VAL, 0, 1000)) / 100.;
+		freq = (float)(map(potVal, 0, POT_ANALOG_MAX_VAL, 0, 1000)) / 100.;
+		freq *= (float)g_dacFreqMult;
+		if (freq == 0.0)
+			freq = 1.0;
 		prevPotVal = potVal;
 		g_genSigDma->Stop();
 		float actFreq;
@@ -357,9 +363,9 @@ void updateSignalFreq(bool bForceUpdate)
 		g_dacFreq = actFreq;
 		g_genSigDma->Start();
 		Serial.print("Set frequency: ");
-		Serial.print(freq);
+		Serial.print((int)freq);
 		Serial.print(", actual freq: ");
-		Serial.println(actFreq);
+		Serial.println((int)actFreq);
 	}
 }
 
@@ -457,14 +463,13 @@ void drawTriggerArrow()
 	s_prevTriggerVal = g_triggerVal;
 }
 
-void drawTexts()
+void drawTexts(bool bForceDrawText)
 {
 	char textBuf[40];
 
 	static uint s_prevDacFreq = -1;
 	static uint s_prevSampleRate = 0;
-
-	bool bForceDrawText = false;
+	static uint s_prevFrameRate = 0;
 
 	// Print signal freq
 	if ( (s_prevDacFreq != g_dacFreq) || bForceDrawText ) {
@@ -507,8 +512,30 @@ void drawTexts()
 		}
 	}
 
+	// Print frame rate
+	if ( (s_prevFrameRate != g_frameRate) || bForceDrawText ) {
+		for (int i = 0; i < 2; i++) {
+			String s = String("FR:");
+			if (i == 0) {
+				// erase prev value
+				s += String(s_prevFrameRate);
+				TFTscreen.stroke(BG_COLOR);
+			}
+			else {
+				// draw new value
+				s += String(g_frameRate);
+				TFTscreen.stroke(TEXT_COLOR);
+			}
+			s += String("fps");
+			s.toCharArray(textBuf, 15);
+			pf(DBG_TEXT, "drawing text at %d:%d\r\n", 10, TEXT_DOWN_Y_OFFSET);
+			TFTscreen.text(textBuf, 10, TEXT_DOWN_Y_OFFSET);
+		}
+	}
+
 	s_prevDacFreq = g_dacFreq;
 	s_prevSampleRate = g_adcSampleRate;
+	s_prevFrameRate = g_frameRate;
 }
 
 inline bool isPointOnGrid(int x, int y)
@@ -634,41 +661,145 @@ void drawSamples()
 	s_prevZoom = g_zoom;
 }
 
-void loop()
+void erasePrevSamples()
+{
+	TFTscreen.stroke(BG_COLOR);
+
+	for (int i = 0; i < TFT_WIDTH - 1; i++) {
+		TFTscreen.line(i, g_samples[i], i+1, g_samples[i+1]);
+	}
+}
+
+void drawSample(uint16_t sample, int iSample)
+{
+	static uint16_t prevSample;
+
+	sample = map(sample, 0, SAMPLE_MAX_VAL, TFT_HEIGHT - 1, 0);
+
+	if (iSample != 0) {
+		TFTscreen.stroke(GRAPH_COLOR);
+		TFTscreen.line(iSample - 1, prevSample, iSample, sample);
+	}
+
+	g_samples[iSample] = sample;
+
+	prevSample = sample;
+}
+
+void computeFrameRate()
+{
+	uint sec = millis() / 1000;
+	static uint s_prevSec = 0;
+	static uint s_loops = 0;
+
+	if (sec != s_prevSec) {
+		s_prevSec = sec;
+		g_frameRate = s_loops;
+		s_loops = 0;
+	}
+	s_loops++;
+}
+
+void getAndDrawSampleSlow()
+{
+	static int s_iSample = 0;
+	static bool s_bFirstCall = true;
+
+
+	if (s_iSample == 0) {
+
+		// compute buffer size to have one trigger every tTrig secs with bufCount buffers
+		float tTrig = 0.1; // Try to have one trigger every 1/10s
+
+		int   bufCount = ADC_DMA_DEF_BUF_COUNT;
+		float fBufSize = (float)g_adcSampleRate * tTrig / (float)bufCount;
+
+		int bufSize = (int)ceil(fBufSize);
+		if (bufSize > ADC_DMA_DEF_BUF_SIZE)
+			bufSize = ADC_DMA_DEF_BUF_SIZE;
+
+		// Make sure we have enough samples to fill the screen..
+		// use *2 to take x-position into account, todo: compute this precisely
+		if (bufSize * bufCount < TFT_WIDTH * 2) {
+			bufSize = TFT_WIDTH * 2 / bufCount;
+		}
+
+		pf(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
+
+		g_adcDma->SetSampleRate(g_adcSampleRate);
+		g_adcDma->SetBuffers(bufCount, bufSize);
+		g_adcDma->Start();
+
+		//TFTscreen.background(BG_COLOR);
+		if (s_bFirstCall) {
+			s_bFirstCall = false;
+		}
+		else {
+			erasePrevSamples();
+		}
+
+		drawTriggerArrow();
+		drawGrid();
+		drawTexts(false);
+	}
+
+	// Wait until next sample is available
+	uint16_t sample;
+	bool isTgSample;
+	while (!g_adcDma->GetNextSample(&sample, NULL, &isTgSample)) {}
+	drawSample(sample, s_iSample);
+
+	s_iSample++;
+
+	if (s_iSample == TFT_WIDTH) {
+		g_adcDma->Stop();
+		s_iSample = 0;
+
+		updateSignalFreq(false);
+		updateTriggerValue();
+		updateAdcSampleRate(false);
+	}
+}
+
+void getAndDrawSamplesFast()
 {
 	bool bTriggerTimeout;
 
-	SCmd.readSerial();
-
 	// compute buffer size to have one trigger every tTrig secs with bufCount buffers
 	float tTrig = 0.1; // Try to have one trigger every 1/10s
-
-	// tTrig = bufCount * bufSize / sampleRate
-	// => bufSize = sampleRate * tTrig / bufCount
 
 	int   bufCount = ADC_DMA_DEF_BUF_COUNT;
 	float fBufSize = (float)g_adcSampleRate * tTrig / (float)bufCount;
 
 	int bufSize = (int)ceil(fBufSize);
+	if (bufSize > ADC_DMA_DEF_BUF_SIZE)
+		bufSize = ADC_DMA_DEF_BUF_SIZE;
 
-	//p("Setting bufSize %d, sample rate %d\n", bufSize, g_adcSampleRate);
+	// Make sure we have enough samples to fill the screen..
+	// use *2 to take x-position into account, todo: compute this precisely
+	if (bufSize * bufCount < TFT_WIDTH * 2) {
+		bufSize = TFT_WIDTH * 2 / bufCount;
+	}
 
-	//g_adcDma->SetBuffers(ADC_DMA_DEF_BUF_COUNT, bufSize);
+	pf(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
 
 	g_adcDma->SetSampleRate(g_adcSampleRate);
 	g_adcDma->SetBuffers(bufCount, bufSize);
 	g_adcDma->Start();
 	g_adcDma->SetTrigger(g_triggerVal, g_triggerMode, SCOPE_CHANNEL, TRIGGER_TIMEOUT);
-	g_adcDma->SetTriggerPreBuffersCount(2);
+	g_adcDma->SetTriggerPreBuffersCount(0);
 	g_adcDma->TriggerEnable(true);
+
+	// Wait for trigger
 	while (!g_adcDma->DidTriggerComplete(&bTriggerTimeout)){}
+
 	uint16_t *triggerBufAddress = NULL;
 	int triggerSampleIndex = 0;
 	bool bDrawnTrigger = false;
 
 	if (!bTriggerTimeout) {
 		g_adcDma->GetTriggerSampleAddress(&triggerBufAddress, &triggerSampleIndex);
-		adcdma_print("TriggerSample buf 0x%08x, index %d\n", triggerBufAddress, triggerSampleIndex);
+		pf(DBG_LOOP, "TriggerSample buf 0x%08x, index %d\r\n", triggerBufAddress, triggerSampleIndex);
 	}
 	else {
 		Serial.println("Trigger timeout !");
@@ -680,26 +811,26 @@ void loop()
 	// Use new buffer before sampling
 	swapSampleBuffer();
 
+	int iLoop = 0;
+
 	while (drawnSamples < TFT_WIDTH) {
 		uint16_t *buf;
-		int count = g_adcDma->GetBufSize();
-		buf = g_adcDma->GetReadBuffer();
-		g_adcDma->AdvanceReadBuffer();
+		int count = bufSize;
 
-		//adcdma_print("Got read buffer 0x%08x, count %d\n", buf, count);
+		buf = g_adcDma->GetReadBuffer();
+
+		pf(DBG_LOOP && DBG_VERBOSE, "Got buffer 0x%08x at loop %d, size %d\r\n", buf, iLoop, bufSize);
+		iLoop++;
+
+		if (buf == NULL) {
+			Serial.println("Got empty read buffer !");
+			break;
+		}
 
 		if (!bDrawnTrigger) {
 			if (buf != triggerBufAddress) {
-				adcdma_print("Not trigger buffer (0x%08x != 0x%08x)\n", buf, triggerBufAddress);
 				continue;
 			}
-			/*
-			adcdma_print("Got trigger buffer\n");
-			Serial.print("Trigger sample: ");
-			Serial.println(buf[triggerSampleIndex]);
-			Serial.print("Trigger sample index: ");
-			Serial.println(triggerSampleIndex);
-			*/
 			bDrawnTrigger = true;
 			buf += triggerSampleIndex;
 			count -= triggerSampleIndex;
@@ -708,27 +839,39 @@ void loop()
 		if (drawnSamples + count > TFT_WIDTH)
 			count = TFT_WIDTH - drawnSamples;
 
-		adcdma_print("Will map %d values on buffer 0x%08x\n", count, buf);
-		mapBufferValues(buf, count);
-
+		mapBufferValues(drawnSamples, buf, count);
 		drawnSamples += count;
+
+		pf(DBG_LOOP && DBG_VERBOSE, "loop %d, drawnSamples: %d\r\n", iLoop, drawnSamples);
 	}
+
+	//g_adcDma->Stop();
 
 	//drawBegin();
 	drawTriggerArrow();
 	drawSamples();
 	drawGrid();
-	drawTexts();
+	drawTexts(false);
 
+	// todo: not needed (?)
 	// Read remaining buffers
-	while (g_adcDma->GetReadBuffer()) {
-		g_adcDma->AdvanceReadBuffer();
-	}
+	//while (g_adcDma->GetReadBuffer()) {
+	//}
 
-	updateSignalFreq(false);
-	updateTriggerValue();
-	updateAdcSampleRate(false);
-
-	g_genSigDma->Loop(true);
 }
 
+void loop()
+{
+	if (g_adcSampleRate < ADC_SAMPLE_RATE_LOW_LIMIT) {
+		getAndDrawSampleSlow();
+	}
+	else {
+		getAndDrawSamplesFast();
+		updateSignalFreq(false);
+		updateTriggerValue();
+		updateAdcSampleRate(false);
+	}
+
+	computeFrameRate();
+	SCmd.readSerial();
+}

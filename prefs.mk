@@ -10,5 +10,6 @@ ARDUINO_EXE=/usr/src/Arduino/build/linux/work/arduino
 ARDUINO_USER_LIBDIR=~/Arduino/libraries
 
 SKETCH_NAME=tftoscillo.ino
+#SKETCH_NAME=testAdcDma.ino
 
 SERIAL_PORT=/dev/ttyACM0
