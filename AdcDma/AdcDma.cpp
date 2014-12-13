@@ -8,6 +8,8 @@
 #define DBG_TRIGGER	false
 #define DBG_READ	false
 #define DBG_WRITE	false
+#define DBG_CHANNEL false
+#define DBG_SAMPLE	false
 
 #define pf(doPrint, ...) LibDbg::pf(doPrint, __FUNCTION__, __VA_ARGS__)
 
@@ -224,13 +226,6 @@ void AdcDma::Start()
 	m_readBufIndex  = 0;
 	m_startBufIndex = 0;
 	m_readSampleIndex = 0;
-	m_avSamples = 0;
-
-	m_lastReadBufIndex = -1;
-	m_lastReadSampleIndex = -1;
-	m_lastWrittenBufIndex = -1;
-	m_lastWrittenSampleIndex = -1;
-
 	m_readBufCount = 0;
 	m_writeBufCount = 0;
 
@@ -295,6 +290,21 @@ bool AdcDma::ReadSingleValue(int adcChannel, int *value)
 
 	// Restore adc configuration
 	ConfigureAdc(false);
+
+	return true;
+}
+
+bool AdcDma::EnableChannel(int channel, bool bEnable)
+{
+	if (channel > ADC_DMA_MAX_ADC_CHANNEL) {
+		pf(DBG_CHANNEL, "invalid channel %d !\r\n", channel);
+		return false;
+	}
+
+	if (bEnable)
+		ADC->ADC_CHER = 0x1 << channel;
+	else
+		ADC->ADC_CHDR = 0x1 << channel;
 
 	return true;
 }
@@ -688,10 +698,12 @@ bool AdcDma::SetSampleRate(int sampleRate)
 		return false;
 	}
 
+	/*
 	if (m_captureState != CaptureStateStopped) {
 		pf(DBG_INIT, "Not in stopped state !\r\n");
 		return false;
 	}
+	*/
 
 	pf(DBG_INIT, "Setting sample rate %d\r\n", sampleRate);
 
@@ -772,6 +784,9 @@ bool AdcDma::ConfigureTimer()
 	t->TC_CMR = (t->TC_CMR & 0xFFF0FFFF) |
 			TC_CMR_ACPA_CLEAR |
 			TC_CMR_ACPC_SET ;  // set clear and set from RA and RC compares
+
+	if (m_captureState == CaptureStateStarted)
+		StartTimer();
 
 	return true;
 }
@@ -943,8 +958,11 @@ uint16_t *AdcDma::GetReadBuffer()
 	return buf;
 }
 
-bool AdcDma::GetNextSample(uint16_t *sample, CaptureState *state, bool *isTriggerSample)
+bool AdcDma::GetNextSample(uint16_t *sample, int *channel, CaptureState *state, bool *isTriggerSample)
 {
+	if (sample == NULL)
+		return false;
+
 	if (state)
 		*state = m_captureState;
 
@@ -983,7 +1001,13 @@ bool AdcDma::GetNextSample(uint16_t *sample, CaptureState *state, bool *isTrigge
 	}
 
 	// And get sample
-	*sample = m_buffers[m_readBufIndex][m_readSampleIndex];
+	uint32_t rawSample = m_buffers[m_readBufIndex][m_readSampleIndex];
+	*sample = rawSample & 0x0FFF;
+	if (channel)
+		*channel = (rawSample & 0xF000) >> 12;
+
+	pf(DBG_SAMPLE, "Got raw sample 0x%x, sample %d, channel %d\r\n", rawSample, *sample, *channel);
+
 	m_readSampleIndex++;
 
 	if (m_readSampleIndex == m_bufSize) {
@@ -1187,23 +1211,19 @@ void AdcDma::HandleInterrupt()
 
 		case TriggerStateCapturing :
 		  {
-			m_avSamples += m_bufSize;
 			// If we reached last buffer, disable ENDRX interrupt
 			if (!AdvanceWriteBuffer()) {
 				ADC->ADC_IDR = ADC_ISR_ENDRX;
 			}
-			pf(DBG_IRQ, "set m_avSamples %d\r\n", m_avSamples);
 			break;
 		  }
 
 		case TriggerStateDisabled :
 		  {
-			m_avSamples += m_bufSize;
 			// If we reached last buffer, disable ENDRX interrupt
 			if (!AdvanceWriteBuffer()) {
 				ADC->ADC_IDR = ADC_ISR_ENDRX;
 			}
-			pf(DBG_IRQ, "set m_avSamples %d\r\n", m_avSamples);
 			break;
 		  }
 

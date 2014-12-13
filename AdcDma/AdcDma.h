@@ -104,9 +104,10 @@ public :
 	bool GetTriggerSampleAddress(uint16_t **pBufAddress, int *pSampleIndex);
 	bool ReadSingleValue(int adcChannel, int *value);
 	bool SetBuffers(int bufCount, int bufSize);
-	bool GetNextSample(uint16_t *sample, CaptureState *state = NULL, bool *isTriggerSample = NULL);
+	bool GetNextSample(uint16_t *sample, int *channel, CaptureState *state = NULL, bool *isTriggerSample = NULL);
 	AdcDma::CaptureState GetCaptureState();
 	bool SetTriggerPreSamplesCount(int triggerPreSamplesCount);
+	bool EnableChannel(int channel, bool bEnable);
 private :
 
 	AdcDma();
@@ -119,10 +120,8 @@ private :
 	int m_readBufIndex;		// Current buffer being read
 	int m_readSampleIndex;	// Current sample being read
 	int m_startBufIndex;	// 1st pre-buffer after triggered
-	int m_avSamples;		// number of available samples
 	int m_readBufCount;		// total number of read buffers since start()
-	int m_writeBufCount;	// total number of write buffers since start()
-
+	int m_writeBufCount;	// total number of written buffers since start()
 
 	int m_adcChannels[ADC_DMA_MAX_ADC_CHANNEL];
 	int m_adcChannelsCount;
@@ -135,12 +134,6 @@ private :
 	int m_triggerSampleBufIndex;
 	int m_triggerSampleIndex;
 	bool m_bTriggerTimeout;
-
-	int m_lastReadBufIndex;
-	int m_lastReadSampleIndex;
-
-	int m_lastWrittenBufIndex;
-	int m_lastWrittenSampleIndex;
 
 	bool ConfigureAdc(bool bSoftwareTrigger);
 	void StartAdc();
