@@ -100,7 +100,9 @@ SerialCommand SCmd;
 #define TRIGGER_COLOR    50 , 196,  10
 #define TEXT_COLOR       0  ,   0, 255
 #define VGRID_COLOR      170, 170, 170
-#define HGRID_COLOR      170, 170, 170
+#define VGRID_SEC_COLOR  230, 230, 230
+#define HGRID_COLOR      VGRID_COLOR
+#define HGRID_SEC_COLOR  VGRID_SEC_COLOR
 
 // Length of trigger arrow
 #define TRIGGER_ARROW_LEN		8
@@ -114,7 +116,7 @@ SerialCommand SCmd;
 
 // Grid definitions
 #define VGRID_START		(TFT_WIDTH / 2)		// x-axis position of the first vertical line
-#define VGRID_INTERVAL  50					// distance between vertical lines
+#define VGRID_INTERVAL  25					// distance between vertical lines
 
 #define HGRID_START     (TFT_HEIGHT / 2)	// y-axis position of the first horizontal line
 #define HGRID_INTERVAL  VGRID_INTERVAL		// distance between horizontal lines
@@ -578,24 +580,54 @@ inline bool isPointOnGrid(int x, int y)
 
 void drawGrid()
 {
+	// Min and max y for horizontal lines
+	// We'll use it to start vertical lines from them
+	int minY = 0, maxY = 0;
+
+	// Use this to draw secondary lines
+	int loop = 0;
+	// Draw one line dark, one line light
+	int secLoop = 2;
+
+	// Draw horizontal grid (horizontal lines)
+	int yStart = HGRID_START;
+	int yOffset = 0;
+	while ( (yStart + yOffset < TFT_HEIGHT) || (yStart - yOffset > 0) ) {
+
+		if (loop % secLoop == 0) {
+			TFTscreen.stroke(HGRID_COLOR);
+		}
+		else {
+			TFTscreen.stroke(HGRID_SEC_COLOR);
+		}
+		loop++;
+
+		TFTscreen.line(0,  yStart + yOffset, TFT_WIDTH, yStart + yOffset);
+		TFTscreen.line(0,  yStart - yOffset, TFT_WIDTH, yStart - yOffset);
+		if (yStart + yOffset < TFT_HEIGHT)
+			maxY = yStart + yOffset;
+		if (yStart - yOffset > 0)
+			minY = yStart - yOffset;
+		yOffset += HGRID_INTERVAL;
+	}
+
 	// Draw vertival grid (vertical lines)
 	TFTscreen.stroke(VGRID_COLOR);
 	int xStart = VGRID_START;
 	int xOffset = 0;
 	while ( (xStart + xOffset < TFT_WIDTH) || (xStart - xOffset > 0) ) {
-		TFTscreen.line(xStart + xOffset, 20, xStart + xOffset, TFT_HEIGHT);
-		TFTscreen.line(xStart - xOffset, 20, xStart - xOffset, TFT_HEIGHT);
-		xOffset += VGRID_INTERVAL;
-	}
 
-	// Draw horizontal grid (horizontal lines)
-	TFTscreen.stroke(HGRID_COLOR);
-	int yStart = HGRID_START;
-	int yOffset = 0;
-	while ( (yStart + yOffset < TFT_HEIGHT) || (yStart - yOffset > 0) ) {
-		TFTscreen.line(0,  yStart + yOffset, TFT_WIDTH, yStart + yOffset);
-		TFTscreen.line(0,  yStart - yOffset, TFT_WIDTH, yStart - yOffset);
-		yOffset += HGRID_INTERVAL;
+		if (loop % secLoop == 0) {
+			TFTscreen.stroke(VGRID_COLOR);
+		}
+		else {
+			TFTscreen.stroke(VGRID_SEC_COLOR);
+		}
+		loop++;
+
+		TFTscreen.line(xStart + xOffset, minY, xStart + xOffset, maxY);
+		TFTscreen.line(xStart - xOffset, minY, xStart - xOffset, maxY);
+		xOffset += VGRID_INTERVAL;
 	}
 }
 
@@ -791,31 +823,33 @@ void getAndDrawSampleSlow()
 	int channel;
 	int freqPotVal = -1;
 	int srPotVal = -1;
+
+	bool bSrChanged = false;
+	bool bFreqChanged = false;
+
 	// Loop until we get a sample, and channel is SCOPE_CHANNEL
 	for (;;) {
 		if (g_adcDma->GetNextSample(&sample, &channel, NULL, &isTgSample)) {
 			if (channel == SCOPE_CHANNEL) {
-				//pf(DBG_LOOP, "got sample %d on channel %d\r\n", sample, channel);
 				drawSample(sample, g_iSample);
 				break;
 			}
+			// First 2/3 samples may be slightly inaccurate, avoid them for pot inputs
+			// Todo: check ADC config !
+			else if (g_iSample < 3) {
+			}
 			else if (channel == FREQ_CHANNEL) {
-				//pf(DBG_LOOP, "got FREQ_CHANNEL value %d\r\n", sample);
 				freqPotVal = sample;
+				bFreqChanged = updateSignalFreq(false, freqPotVal);
 			}
 			else if (channel == ADC_RATE_CHANNEL) {
 				srPotVal = sample;
+				bSrChanged = updateAdcSampleRate(false, srPotVal);
 			}
 		}
 	}
 
 	g_iSample++;
-
-	bool bSrChanged = false;
-	bool bFreqChanged = false;
-
-	bFreqChanged = updateSignalFreq(false, freqPotVal);
-	bSrChanged = updateAdcSampleRate(false, srPotVal);
 
 	if (bSrChanged) {
 		g_adcDma->SetSampleRate(g_adcSampleRate);
