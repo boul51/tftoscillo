@@ -41,6 +41,12 @@
 
 #define TRIGGER_TIMEOUT				100
 
+// Trigger definitions
+#define TRIGGER_STATUS_TIMEOUT		0
+#define TRIGGER_STATUS_TRIGGERED	1
+#define TRIGGER_STATUS_NONE			2
+uint g_triggerStatus = TRIGGER_STATUS_NONE;
+
 // Rate from which we switch to HS / LS mode
 #define ADC_SAMPLE_RATE_LOW_LIMIT	300
 
@@ -49,9 +55,10 @@
 int g_scopeDrawMode = SCOPE_DRAW_MODE_FAST;
 
 // Tests show that ADC doesn't sample well with freq >= 1830000 Hz.
+// (Not so bad since nominal max rate is 1MHz)
 #define ADC_MIN_SAMPLE_RATE  100
-//#define ADC_MAX_SAMPLE_RATE 1825000
-#define ADC_MAX_SAMPLE_RATE 1000
+#define ADC_MAX_SAMPLE_RATE 1825000
+//#define ADC_MAX_SAMPLE_RATE 1000
 uint g_adcMinSampleRate = ADC_MIN_SAMPLE_RATE;
 uint g_adcMaxSampleRate = ADC_MAX_SAMPLE_RATE;
 uint g_adcSampleRate = ADC_MIN_SAMPLE_RATE;
@@ -95,14 +102,17 @@ AdcDma *g_adcDma = NULL;
 SerialCommand SCmd;
 
 // Colors definitions
-#define BG_COLOR         255, 255, 255
-#define GRAPH_COLOR      255,   0,   0
-#define TRIGGER_COLOR    50 , 196,  10
-#define TEXT_COLOR       0  ,   0, 255
-#define VGRID_COLOR      170, 170, 170
-#define VGRID_SEC_COLOR  230, 230, 230
-#define HGRID_COLOR      VGRID_COLOR
-#define HGRID_SEC_COLOR  VGRID_SEC_COLOR
+#define BG_COLOR				255, 255, 255
+#define GRAPH_COLOR				255,   0,   0
+#define TRIGGER_COLOR			 50, 196,  10
+#define TEXT_COLOR				  0,   0, 255
+#define VGRID_COLOR				170, 170, 170
+#define VGRID_SEC_COLOR			230, 230, 230
+#define HGRID_COLOR				170, 170, 170
+#define HGRID_SEC_COLOR			230, 230, 230
+#define TRIGGER_TIMEOUT_COLOR	255,   0,   0
+#define TRIGGER_TRIGGERED_COLOR	  0, 255,   0
+#define TRIGGER_NONE_COLOR		100, 100, 100
 
 // Length of trigger arrow
 #define TRIGGER_ARROW_LEN		8
@@ -411,6 +421,9 @@ bool updateAdcSampleRate(bool bForceUpdate, int potVal)
 	if (bForceUpdate || (abs(potVal - prevPotVal) > POT_ANALOG_DIFF) ) {
 		// Divide by 4 to avoid clipping
 		g_adcSampleRate = map(potVal / 4, 0, POT_ANALOG_MAX_VAL / 4, g_adcMinSampleRate, g_adcMaxSampleRate);
+		// Need to clip since value read might be a bit more than POT_ANALOG_MAX_VAL
+		if (g_adcSampleRate > g_adcMaxSampleRate)
+			g_adcSampleRate = g_adcMaxSampleRate;
 		prevPotVal = potVal;
 
 		rateChanged = true;
@@ -499,6 +512,7 @@ void drawTexts(bool bForceDrawText)
 	static uint s_prevDacFreq = -1;
 	static uint s_prevSampleRate = 0;
 	static uint s_prevFrameRate = 0;
+	static uint s_prevTriggerStatus = TRIGGER_STATUS_NONE;
 
 	// Print signal freq
 	if ( (s_prevDacFreq != g_dacFreq) || bForceDrawText ) {
@@ -562,9 +576,37 @@ void drawTexts(bool bForceDrawText)
 		}
 	}
 
+	// Print trigger status
+	// We don't need the loop here, but keep it for compat in case trigger text changes
+	if (s_prevTriggerStatus != g_triggerStatus || bForceDrawText) {
+		for (int i = 0; i < 2; i++) {
+			String s = String("T");
+			if (i == 0) {
+				TFTscreen.stroke(BG_COLOR);
+			}
+			else {
+				switch (g_triggerStatus) {
+				case TRIGGER_STATUS_TIMEOUT :
+					TFTscreen.stroke(TRIGGER_TIMEOUT_COLOR);
+					break;
+				case TRIGGER_STATUS_TRIGGERED :
+					TFTscreen.stroke(TRIGGER_TRIGGERED_COLOR);
+					break;
+				default :
+					TFTscreen.stroke(TRIGGER_NONE_COLOR);
+					break;
+				}
+			}
+			s.toCharArray(textBuf, 15);
+			pf(DBG_TEXT, "drawing text at %d:%d\r\n", 10, TEXT_DOWN_Y_OFFSET);
+			TFTscreen.text(textBuf, TFT_WIDTH / 2, TEXT_DOWN_Y_OFFSET);
+		}
+	}
+
 	s_prevDacFreq = g_dacFreq;
 	s_prevSampleRate = g_adcSampleRate;
 	s_prevFrameRate = g_frameRate;
+	s_prevTriggerStatus = g_triggerStatus;
 }
 
 inline bool isPointOnGrid(int x, int y)
@@ -773,7 +815,12 @@ int g_iSample = 0;
 void enterScopeDrawMode(int drawMode)
 {
 	if (drawMode == SCOPE_DRAW_MODE_SLOW) {
+		g_triggerStatus = TRIGGER_STATUS_NONE;
 		g_iSample = 0;
+		TFTscreen.background(BG_COLOR);
+		drawTriggerArrow();
+		drawGrid();
+		drawTexts(true);
 	}
 }
 
@@ -909,10 +956,12 @@ void getAndDrawSamplesFast()
 
 	if (!bTriggerTimeout) {
 		g_adcDma->GetTriggerSampleAddress(&triggerBufAddress, &triggerSampleIndex);
+		g_triggerStatus = TRIGGER_STATUS_TRIGGERED;
 		pf(DBG_LOOP, "TriggerSample buf 0x%08x, index %d\r\n", triggerBufAddress, triggerSampleIndex);
 	}
 	else {
 		Serial.println("Trigger timeout !");
+		g_triggerStatus = TRIGGER_STATUS_TIMEOUT;
 		bDrawnTrigger = true;
 	}
 
@@ -957,7 +1006,7 @@ void getAndDrawSamplesFast()
 
 	g_adcDma->Stop();
 
-	while (g_adcDma->GetReadBuffer()) {}
+	//while (g_adcDma->GetReadBuffer()) {}
 
 	drawBegin();
 	drawTriggerArrow();
