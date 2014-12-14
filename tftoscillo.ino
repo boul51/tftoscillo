@@ -403,8 +403,6 @@ void updateTriggerValue()
 	if (abs(potVal - prevPotVal) > 100) {
 		g_triggerVal = potVal;
 		prevPotVal = potVal;
-		Serial.print("Setting trigger: ");
-		Serial.println(g_triggerVal);
 	}
 }
 
@@ -960,7 +958,6 @@ void getAndDrawSamplesFast()
 		pf(DBG_LOOP, "TriggerSample buf 0x%08x, index %d\r\n", triggerBufAddress, triggerSampleIndex);
 	}
 	else {
-		Serial.println("Trigger timeout !");
 		g_triggerStatus = TRIGGER_STATUS_TIMEOUT;
 		bDrawnTrigger = true;
 	}
