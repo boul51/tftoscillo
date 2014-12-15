@@ -966,17 +966,27 @@ void AdcDma::triggerFindTriggerSample()
 	// Skip pre buffers for trigger sample
 	int iBuf = (m_readBufIndex + m_triggerPreBuffersCount) % m_bufCount;
 
+	uint16_t rawSample;
+	uint16_t sample;
 
 	while (bufLoops < m_bufCount) {
 		for (int iSample = 0; iSample < m_bufSize; iSample++) {
+			rawSample = m_buffers[iBuf][iSample];
+			if (m_adcChannelsCount > 1) {
+				if ( (rawSample & 0xF000) >> 12 != m_triggerChannel)
+					continue;
+			}
+
+			sample = (rawSample & 0x0FFF) >> 0;
+
 			if (m_triggerMode == RisingEdge) {
 				if (!bArmed) {
-					if (m_buffers[iBuf][iSample] < m_triggerVal) {
+					if (sample < m_triggerVal) {
 						bArmed = true;
 					}
 				}
 				else {
-					if (m_buffers[iBuf][iSample] >= m_triggerVal) {
+					if (sample >= m_triggerVal) {
 						// Got trigger sample
 						m_triggerSampleBufIndex = iBuf;
 						m_triggerSampleIndex = iSample;
@@ -987,12 +997,12 @@ void AdcDma::triggerFindTriggerSample()
 			}
 			else if (m_triggerMode == FallingEdge) {
 				if (!bArmed) {
-					if (m_buffers[iBuf][iSample] > m_triggerVal) {
+					if (sample > m_triggerVal) {
 						bArmed = true;
 					}
 				}
 				else {
-					if (m_buffers[iBuf][iSample] <= m_triggerVal) {
+					if (sample <= m_triggerVal) {
 						// Got trigger sample
 						m_triggerSampleBufIndex = iBuf;
 						m_triggerSampleIndex = iSample;

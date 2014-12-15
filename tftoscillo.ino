@@ -29,6 +29,8 @@
 // Pot and scope input pins
 #define SCOPE_CHANNEL_1     7
 #define SCOPE_CHANNEL_2     3
+#define SCOPE_CHANNEL_3     2
+#define SCOPE_CHANNEL_4     1
 #define FREQ_CHANNEL        6
 #define ADC_RATE_CHANNEL    5
 #define TRIG_CHANNEL        4
@@ -136,8 +138,8 @@ SerialCommand SCmd;
 // Tft screen instance
 TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
+//int g_channels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2, SCOPE_CHANNEL_3, SCOPE_CHANNEL_4};
 int g_channels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2};
-//int g_channels [] = {SCOPE_CHANNEL_1};
 int g_channelsCount = sizeof(g_channels) / sizeof(g_channels[0]);
 
 // Channel descriptors
@@ -398,13 +400,16 @@ inline CHANNEL_DESC *getChannelDesc(int channel)
 void mapBufferValues(int offset, uint16_t *buf, int count)
 {
 	uint16_t rawSample;
-	uint32_t sample;
-	uint32_t mappedVal;
+	uint16_t sample;
+	uint16_t mappedVal;
 	int channel;
+	int mappedSamples = 0;
 
 	CHANNEL_DESC *channelDesc = &g_channelDescs[0];
 
 	for (int iSample = 0; iSample < count; iSample++) {
+		if (iSample / g_channelsCount + offset >= TFT_WIDTH)
+			break;
 		// Channel tag is set only if there are more than one channel
 		if (g_channelsCount > 1) {
 			rawSample = buf[iSample];
@@ -416,8 +421,12 @@ void mapBufferValues(int offset, uint16_t *buf, int count)
 			sample = buf[iSample];
 		}
 		mappedVal = map(sample, 0, SAMPLE_MAX_VAL, g_maxY, g_minY);
+
 		channelDesc->curSamples[iSample / g_channelsCount + offset] = mappedVal;
+		mappedSamples++;
 	}
+
+	return;
 }
 
 bool updateSignalFreq(bool bForceUpdate, int potVal)
@@ -1032,6 +1041,11 @@ void getAndDrawSamplesFast()
 		bufSize = TFT_WIDTH * 2 * g_channelsCount / bufCount;
 	}
 
+	// Make sure bufSize is a multiple of channels count
+	while (bufSize % g_channelsCount) {
+		bufSize--;
+	}
+
 	PF(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
 
 	g_adcDma->Stop();
@@ -1050,7 +1064,6 @@ void getAndDrawSamplesFast()
 
 	uint16_t *triggerBufAddress = NULL;
 	int triggerSampleIndex = 0;
-	bool bDrawnTrigger = false;
 
 	if (!bTriggerTimeout) {
 		g_adcDma->GetTriggerSampleAddress(&triggerBufAddress, &triggerSampleIndex);
@@ -1059,47 +1072,37 @@ void getAndDrawSamplesFast()
 	}
 	else {
 		g_triggerStatus = TRIGGER_STATUS_TIMEOUT;
-		bDrawnTrigger = true;
+		PF(true, "Trigger timeout !\r\n");
 	}
 
-	int drawnSamples = 0;
+	int x = 0;
 
 	// Use new buffer before drawing
 	swapSampleBuffer();
 
-	int iLoop = 0;
+	int iBuf = 0;
 
-	while (drawnSamples < TFT_WIDTH * g_channelsCount) {
+	while (x < TFT_WIDTH) {
 		uint16_t *buf;
-		int count = bufSize;
+		int samplesInBuf = bufSize;
 
 		buf = g_adcDma->GetReadBuffer();
 
-		PF(DBG_LOOP && DBG_VERBOSE, "Got buffer 0x%08x at loop %d, size %d\r\n", buf, iLoop, bufSize);
-		iLoop++;
-
 		if (buf == NULL) {
-			Serial.println("Got empty read buffer !");
+			PF(true, "Got null buffer !\r\n");
 			break;
 		}
 
-		if (!bDrawnTrigger) {
-			if (buf != triggerBufAddress) {
-				continue;
-			}
-			bDrawnTrigger = true;
+		// We set pretrigger buffers to 0, so first buffer contains the trigger sample
+		if (iBuf == 0) {
 			buf += triggerSampleIndex;
-			count -= triggerSampleIndex;
+			samplesInBuf -= triggerSampleIndex;
 		}
+		iBuf++;
 
-		if (drawnSamples + count > TFT_WIDTH * g_channelsCount)
-			count = (TFT_WIDTH - drawnSamples) * g_channelsCount;
+		mapBufferValues(x, buf, samplesInBuf);
 
-		mapBufferValues(drawnSamples, buf, count);
-
-		drawnSamples += count;
-
-		PF(DBG_LOOP && DBG_VERBOSE, "loop %d, drawnSamples: %d\r\n", iLoop, drawnSamples);
+		x += samplesInBuf / g_channelsCount;
 	}
 
 	g_adcDma->Stop();
