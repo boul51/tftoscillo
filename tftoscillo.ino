@@ -57,7 +57,7 @@ int g_scopeDrawMode = SCOPE_DRAW_MODE_FAST;
 // Tests show that ADC doesn't sample well with freq >= 1830000 Hz.
 // (Not so bad since nominal max rate is 1MHz)
 #define ADC_MIN_SAMPLE_RATE  10
-#define ADC_MAX_SAMPLE_RATE 100
+#define ADC_MAX_SAMPLE_RATE 1825000
 //#define ADC_MAX_SAMPLE_RATE 1000
 uint g_adcMinSampleRate = ADC_MIN_SAMPLE_RATE;
 uint g_adcMaxSampleRate = ADC_MAX_SAMPLE_RATE;
@@ -131,12 +131,38 @@ SerialCommand SCmd;
 #define HGRID_START     (TFT_HEIGHT / 2)	// y-axis position of the first horizontal line
 #define HGRID_INTERVAL  VGRID_INTERVAL		// distance between horizontal lines
 
+#define HGRID_MARGIN	10					// distance between border and first horizontal line
+
 // Tft screen instance
 TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
+
+int g_channels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2};
+//int g_channels [] = {SCOPE_CHANNEL_1};
+int g_channelsCount = sizeof(g_channels) / sizeof(g_channels[0]);
+
+// Channel descriptors
+CHANNEL_DESC *g_channelDescs;
+
+int g_minY, g_maxY;
 
 void setup() {
 
 	Serial.begin(115200);
+
+	g_channelDescs = (CHANNEL_DESC *)malloc(g_channelsCount * sizeof(CHANNEL_DESC));
+
+	// Init channels descriptors
+	for (int i = 0; i < g_channelsCount; i++) {
+		g_channelDescs[i].channel = g_channels[i];
+		g_channelDescs[i].bufSize = TFT_WIDTH;
+		g_channelDescs[i].color[0] = 255 % (i + 0);
+		g_channelDescs[i].color[1] = 255 % (i + 1);
+		g_channelDescs[i].color[2] = 255 % (i + 2);
+		g_channelDescs[i].samples[0] = (uint16_t *)malloc(g_channelDescs[i].bufSize * sizeof(uint16_t));
+		g_channelDescs[i].samples[1] = (uint16_t *)malloc(g_channelDescs[i].bufSize * sizeof(uint16_t));
+		g_channelDescs[i].curSamples = g_channelDescs[i].samples[0];
+		g_channelDescs[i].oldSamples = g_channelDescs[i].samples[1];
+	}
 
 	SCmd.addCommand("tgmode", triggerModeHandler);
 	SCmd.addCommand("fr", freqMultHandler);
@@ -166,6 +192,9 @@ void setup() {
 	updateAdcSampleRate(true, -1);
 	updateSignalFreq(true, -1);
 	updateTriggerValue(-1);
+
+	// Call drawGrid to update g_minY and g_maxY
+	drawGrid();
 
 	enterScopeDrawMode(SCOPE_DRAW_MODE_SLOW);
 }
@@ -356,10 +385,38 @@ void formHandler()
 	updateSignalFreq(true, -1);
 }
 
+inline CHANNEL_DESC *getChannelDesc(int channel)
+{
+	for (int i = 0; i < g_channelsCount; i++) {
+		if (g_channelDescs[i].channel == channel)
+			return &g_channelDescs[i];
+	}
+
+	return NULL;
+}
+
 void mapBufferValues(int offset, uint16_t *buf, int count)
 {
+	uint16_t rawSample;
+	uint32_t sample;
+	uint32_t mappedVal;
+	int channel;
+
+	CHANNEL_DESC *channelDesc = &g_channelDescs[0];
+
 	for (int iSample = 0; iSample < count; iSample++) {
-		g_samples[iSample + offset] = map(buf[iSample], 0, SAMPLE_MAX_VAL, TFT_HEIGHT - 1, 0);
+		// Channel tag is set only if there are more than one channel
+		if (g_channelsCount > 1) {
+			rawSample = buf[iSample];
+			channel = (rawSample & 0xF000) >> 12;
+			sample  = (rawSample & 0x0FFF) >> 0;
+			channelDesc = getChannelDesc(channel);
+		}
+		else {
+			sample = buf[iSample];
+		}
+		mappedVal = map(sample, 0, SAMPLE_MAX_VAL, g_maxY, g_minY);
+		channelDesc->curSamples[iSample / g_channelsCount + offset] = mappedVal;
 	}
 }
 
@@ -455,12 +512,26 @@ bool updateAdcSampleRate(bool bForceUpdate, int potVal)
 
 void swapSampleBuffer()
 {
+#if 0
 	if (g_samples == g_samples0)
 		g_samples = g_samples1;
 	else
 		g_samples = g_samples0;
+#endif
+	for (int iChannel = 0; iChannel < g_channelsCount; iChannel++) {
+		CHANNEL_DESC *pChannelDesc = &g_channelDescs[iChannel];
+		if (pChannelDesc->curSamples == pChannelDesc->samples[0]) {
+			pChannelDesc->curSamples = pChannelDesc->samples[1];
+			pChannelDesc->oldSamples = pChannelDesc->samples[0];
+		}
+		else {
+			pChannelDesc->curSamples = pChannelDesc->samples[0];
+			pChannelDesc->oldSamples = pChannelDesc->samples[1];
+		}
+	}
 }
 
+#if 0
 uint16_t *getNewSamples()
 {
 	return g_samples;
@@ -473,6 +544,7 @@ uint16_t *getOldSamples()
 	else
 		return g_samples0;
 }
+#endif
 
 void drawBegin()
 {
@@ -639,7 +711,7 @@ void drawGrid()
 	// Draw horizontal grid (horizontal lines)
 	int yStart = HGRID_START;
 	int yOffset = 0;
-	int margin = 10;
+	int margin = HGRID_MARGIN;
 	while ( (yStart + yOffset + margin < TFT_HEIGHT) || (yStart - yOffset > margin) ) {
 
 		if (loop % secLoop == 0) {
@@ -677,48 +749,58 @@ void drawGrid()
 		TFTscreen.line(xStart - xOffset, minY, xStart - xOffset, maxY);
 		xOffset += VGRID_INTERVAL;
 	}
+
+	g_minY = minY;
+	g_maxY = maxY;
 }
 
 void drawSamples()
 {
 	static int s_prevZoom = 1;
 
+	// debug
+	//int channelsCount = 1;
+	int channelsCount = g_channelsCount;
+
 	if (g_eraseMode == ERASE_MODE_ALT) {
 
-		uint16_t *oldSamples = getOldSamples();
-		uint16_t *newSamples = getNewSamples();
+		uint16_t *oldSamples;
+		uint16_t *newSamples;
 
 		int iSample = 1;
 
 		int lastXDraw = 0;
-		int lastYDraw = newSamples[0];
 
 		// Erase first old sample
-		TFTscreen.stroke(BG_COLOR);
-		TFTscreen.line(0, oldSamples[0], s_prevZoom, oldSamples[1]);
+
+		for (int iChannel = 0; iChannel < channelsCount; iChannel++) {
+			oldSamples = g_channelDescs[iChannel].oldSamples;
+			TFTscreen.stroke(BG_COLOR);
+			TFTscreen.line(0, oldSamples[0], s_prevZoom, oldSamples[1]);
+		}
+
 		int lastXErase = s_prevZoom;
-		int lastYErase = oldSamples[1];
 
 		// Erase sample iSample+1 while drawing sample iSample
 		// otherwise, new drawn line could be overwritten by erased line
 		for (;;) {
-			uint16_t sample;
-
-			// Erase old sample
-			if (iSample + 1 < TFT_WIDTH) {
-				sample = oldSamples[iSample + 1];
-				TFTscreen.stroke(BG_COLOR);
-				TFTscreen.line(lastXErase, lastYErase, lastXErase + s_prevZoom, sample);
-				lastXErase += s_prevZoom;
-				lastYErase = sample;
+			for (int iChannel = 0; iChannel < channelsCount; iChannel++) {
+				oldSamples = g_channelDescs[iChannel].oldSamples;
+				// Erase old sample
+				if (iSample + 1 < TFT_WIDTH) {
+					TFTscreen.stroke(BG_COLOR);
+					TFTscreen.line(lastXErase, oldSamples[iSample], lastXErase + s_prevZoom, oldSamples[iSample + 1]);
+				}
 			}
+			lastXErase += s_prevZoom;
 
-			// Draw new sample
-			sample = newSamples[iSample];
-			TFTscreen.stroke(GRAPH_COLOR);
-			TFTscreen.line(lastXDraw, lastYDraw, lastXDraw + g_zoom, sample);
+			for (int iChannel = 0; iChannel < channelsCount; iChannel++) {
+				newSamples = g_channelDescs[iChannel].curSamples;
+				// Draw new sample
+				TFTscreen.stroke(GRAPH_COLOR);
+				TFTscreen.line(lastXDraw, newSamples[iSample - 1], lastXDraw + g_zoom, newSamples[iSample]);
+			}
 			lastXDraw += g_zoom;
-			lastYDraw = sample;
 
 			iSample++;
 
@@ -729,6 +811,7 @@ void drawSamples()
 				break;
 		}
 	}
+#if 0
 	else {
 		uint16_t *samples;
 		for (int i = 0; i < 2; i++) {
@@ -764,6 +847,7 @@ void drawSamples()
 			}
 		}
 	}
+#endif
 
 	s_prevZoom = g_zoom;
 }
@@ -932,14 +1016,11 @@ void getAndDrawSamplesFast()
 {
 	bool bTriggerTimeout;
 
-	int channels [] = {SCOPE_CHANNEL_1};
-	int channelsCount = sizeof(channels) / sizeof(channels[0]);
-
 	// compute buffer size to have one trigger every tTrig secs with bufCount buffers
 	float tTrig = 0.1; // Try to have one trigger every 1/10s
 
 	int   bufCount = ADC_DMA_DEF_BUF_COUNT;
-	float fBufSize = (float)g_adcSampleRate * tTrig / (float)bufCount * (float)channelsCount;
+	float fBufSize = (float)g_adcSampleRate * tTrig / (float)bufCount * (float)g_channelsCount;
 
 	int bufSize = (int)ceil(fBufSize);
 	if (bufSize > ADC_DMA_DEF_BUF_SIZE)
@@ -947,15 +1028,15 @@ void getAndDrawSamplesFast()
 
 	// Make sure we have enough samples to fill the screen..
 	// use *2 to take x-position into account, todo: compute this precisely
-	if (bufSize * bufCount < TFT_WIDTH * 2 * channelsCount) {
-		bufSize = TFT_WIDTH * 2 * channelsCount / bufCount;
+	if (bufSize * bufCount < TFT_WIDTH * 2 * g_channelsCount) {
+		bufSize = TFT_WIDTH * 2 * g_channelsCount / bufCount;
 	}
 
 	PF(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
 
 	g_adcDma->Stop();
 
-	g_adcDma->SetAdcChannels(channels, channelsCount);
+	g_adcDma->SetAdcChannels(g_channels, g_channelsCount);
 	g_adcDma->SetSampleRate(g_adcSampleRate);
 	g_adcDma->SetBuffers(bufCount, bufSize);
 	g_adcDma->Start();
@@ -964,6 +1045,7 @@ void getAndDrawSamplesFast()
 	g_adcDma->TriggerEnable(true);
 
 	// Wait for trigger
+
 	while (!g_adcDma->DidTriggerComplete(&bTriggerTimeout)){}
 
 	uint16_t *triggerBufAddress = NULL;
@@ -987,7 +1069,7 @@ void getAndDrawSamplesFast()
 
 	int iLoop = 0;
 
-	while (drawnSamples < TFT_WIDTH) {
+	while (drawnSamples < TFT_WIDTH * g_channelsCount) {
 		uint16_t *buf;
 		int count = bufSize;
 
@@ -1010,10 +1092,11 @@ void getAndDrawSamplesFast()
 			count -= triggerSampleIndex;
 		}
 
-		if (drawnSamples + count > TFT_WIDTH)
-			count = TFT_WIDTH - drawnSamples;
+		if (drawnSamples + count > TFT_WIDTH * g_channelsCount)
+			count = (TFT_WIDTH - drawnSamples) * g_channelsCount;
 
 		mapBufferValues(drawnSamples, buf, count);
+
 		drawnSamples += count;
 
 		PF(DBG_LOOP && DBG_VERBOSE, "loop %d, drawnSamples: %d\r\n", iLoop, drawnSamples);
