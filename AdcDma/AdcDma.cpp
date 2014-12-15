@@ -263,7 +263,7 @@ bool AdcDma::GetNextSample(uint16_t *sample, int *channel, CaptureState *state, 
 
 	// At this point we know we have available data
 
-	// And get sample
+	// Get sample
 	uint32_t rawSample = m_buffers[m_readBufIndex][m_readSampleIndex];
 	*sample = rawSample & 0x0FFF;
 	if (channel)

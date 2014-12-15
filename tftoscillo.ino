@@ -147,6 +147,13 @@ CHANNEL_DESC *g_channelDescs;
 
 int g_minY, g_maxY;
 
+uint8_t g_scopeColors[][3] = {
+	{255, 102,  51},
+	{204,  51, 255},
+	{ 51, 204, 255},
+	{255,  51, 204},
+};
+
 void setup() {
 
 	Serial.begin(115200);
@@ -157,13 +164,18 @@ void setup() {
 	for (int i = 0; i < g_channelsCount; i++) {
 		g_channelDescs[i].channel = g_channels[i];
 		g_channelDescs[i].bufSize = TFT_WIDTH;
-		g_channelDescs[i].color[0] = 255 % (i + 0);
-		g_channelDescs[i].color[1] = 255 % (i + 1);
-		g_channelDescs[i].color[2] = 255 % (i + 2);
+
+		g_channelDescs[i].r = g_scopeColors[i][0];
+		g_channelDescs[i].g = g_scopeColors[i][1];
+		g_channelDescs[i].b = g_scopeColors[i][2];
+
 		g_channelDescs[i].samples[0] = (uint16_t *)malloc(g_channelDescs[i].bufSize * sizeof(uint16_t));
 		g_channelDescs[i].samples[1] = (uint16_t *)malloc(g_channelDescs[i].bufSize * sizeof(uint16_t));
 		g_channelDescs[i].curSamples = g_channelDescs[i].samples[0];
 		g_channelDescs[i].oldSamples = g_channelDescs[i].samples[1];
+
+		memset(g_channelDescs[i].curSamples, 0, g_channelDescs[i].bufSize * sizeof(uint16_t));
+		memset(g_channelDescs[i].oldSamples, 0, g_channelDescs[i].bufSize * sizeof(uint16_t));
 	}
 
 	SCmd.addCommand("tgmode", triggerModeHandler);
@@ -191,6 +203,8 @@ void setup() {
 	g_adcDma->SetAdcChannels(&adcChannel, 1);
 	g_adcDma->SetTimerChannel(1);
 
+	enterScopeDrawMode(SCOPE_DRAW_MODE_SLOW);
+
 	updateAdcSampleRate(true, -1);
 	updateSignalFreq(true, -1);
 	updateTriggerValue(-1);
@@ -198,7 +212,6 @@ void setup() {
 	// Call drawGrid to update g_minY and g_maxY
 	drawGrid();
 
-	enterScopeDrawMode(SCOPE_DRAW_MODE_SLOW);
 }
 
 void defaultHandler()
@@ -806,7 +819,7 @@ void drawSamples()
 			for (int iChannel = 0; iChannel < channelsCount; iChannel++) {
 				newSamples = g_channelDescs[iChannel].curSamples;
 				// Draw new sample
-				TFTscreen.stroke(GRAPH_COLOR);
+				TFTscreen.stroke(g_channelDescs[iChannel].r, g_channelDescs[iChannel].g, g_channelDescs[iChannel].b);
 				TFTscreen.line(lastXDraw, newSamples[iSample - 1], lastXDraw + g_zoom, newSamples[iSample]);
 			}
 			lastXDraw += g_zoom;
@@ -861,8 +874,9 @@ void drawSamples()
 	s_prevZoom = g_zoom;
 }
 
-void erasePrevSamples()
+void erasePrevSamples(CHANNEL_DESC *pChannelDesc)
 {
+	/*
 	static bool bFirstCall = true;
 
 	// We have nothing to erase the first time we're called since g_samples was not written yet
@@ -870,28 +884,34 @@ void erasePrevSamples()
 		bFirstCall = false;
 		return;
 	}
+	*/
+
+	if (pChannelDesc->oldSamples == NULL)
+		return;
 
 	TFTscreen.stroke(BG_COLOR);
 
 	for (int i = 0; i < TFT_WIDTH - 1; i++) {
-		TFTscreen.line(i, g_samples[i], i+1, g_samples[i+1]);
+		//TFTscreen.line(i, g_samples[i], i+1, g_samples[i+1]);
+		TFTscreen.line(i, pChannelDesc->oldSamples[i], i+1, pChannelDesc->oldSamples[i+1]);
 	}
 }
 
-void drawSample(uint16_t sample, int iSample)
+void drawSample(uint16_t sample, int iSample, CHANNEL_DESC *pChannelDesc)
 {
-	static uint16_t prevSample;
+	//static uint16_t prevSample;
 
-	sample = map(sample, 0, SAMPLE_MAX_VAL, TFT_HEIGHT - 1, 0);
+	sample = map(sample, 0, SAMPLE_MAX_VAL, g_maxY, g_minY);
 
 	if (iSample != 0) {
-		TFTscreen.stroke(GRAPH_COLOR);
-		TFTscreen.line(iSample - 1, prevSample, iSample, sample);
+		TFTscreen.stroke(pChannelDesc->r, pChannelDesc->g, pChannelDesc->b);
+		TFTscreen.line(iSample - 1, pChannelDesc->curSamples[iSample - 1], iSample, sample);
 	}
 
-	g_samples[iSample] = sample;
+	//g_samples[iSample] = sample;
+	pChannelDesc->curSamples[iSample] = sample;
 
-	prevSample = sample;
+	//prevSample = sample;
 }
 
 void computeFrameRate()
@@ -925,8 +945,18 @@ void enterScopeDrawMode(int drawMode)
 
 void getAndDrawSampleSlow()
 {
-	int channels[] = {SCOPE_CHANNEL_1, FREQ_CHANNEL, ADC_RATE_CHANNEL, TRIG_CHANNEL};
-	int channelsCount = sizeof(channels) / sizeof(channels[0]);
+	int potChannels[] = {FREQ_CHANNEL, ADC_RATE_CHANNEL, TRIG_CHANNEL};
+	int potChannelsCount = sizeof(potChannels) / sizeof(potChannels[0]);
+
+	int channels[256];
+	int channelsCount;
+	for (int i = 0; i < g_channelsCount; i++) {
+		channels[i] = g_channels[i];
+	}
+	for (int i = 0; i < potChannelsCount; i++) {
+		channels[g_channelsCount + i] = potChannels[i];
+	}
+	channelsCount = g_channelsCount + potChannelsCount;
 
 	g_adcDma->SetAdcChannels(channels, channelsCount);
 
@@ -940,7 +970,11 @@ void getAndDrawSampleSlow()
 		g_adcDma->Start();
 		g_adcDma->TriggerEnable(true);
 
-		erasePrevSamples();
+		swapSampleBuffer();
+
+		for (int i = 0; i < g_channelsCount; i++) {
+			erasePrevSamples(&g_channelDescs[i]);
+		}
 
 		drawTriggerArrow();
 		drawGrid();
@@ -964,25 +998,45 @@ void getAndDrawSampleSlow()
 	if (g_iSample == 0) {
 		s_gotTriggerSample = false;
 		g_triggerStatus = TRIGGER_STATUS_NONE;
-		drawTexts(false);
+		drawTexts(true);
 	}
 
-	// Loop until we get a sample, and channel is SCOPE_CHANNEL
+	/*
+	if (channel == SCOPE_CHANNEL_1) {
+		if (isTgSample) {
+			g_iSample = 0;
+		}
+		if (!s_gotTriggerSample && isTgSample) {
+			g_triggerStatus = TRIGGER_STATUS_TRIGGERED;
+			drawTexts(false);
+		}
+		s_gotTriggerSample |= isTgSample;
+		if (s_gotTriggerSample) {
+			drawSample(sample, g_iSample);
+		}
+		break;
+	}
+	*/
+
+	// Loop until we get a sample for each scope channel
+	int obtainedChannels = 0;
 	for (;;) {
 		if (g_adcDma->GetNextSample(&sample, &channel, NULL, &isTgSample)) {
-			if (channel == SCOPE_CHANNEL_1) {
+			CHANNEL_DESC *pChannelDesc = getChannelDesc(channel);
+			if (pChannelDesc) {
 				if (isTgSample) {
 					g_iSample = 0;
+					if (!s_gotTriggerSample) {
+						g_triggerStatus = TRIGGER_STATUS_TRIGGERED;
+						drawTexts(false);
+					}
+					s_gotTriggerSample = true;
 				}
-				if (!s_gotTriggerSample && isTgSample) {
-					g_triggerStatus = TRIGGER_STATUS_TRIGGERED;
-					drawTexts(false);
-				}
-				s_gotTriggerSample |= isTgSample;
+
 				if (s_gotTriggerSample) {
-					drawSample(sample, g_iSample);
+					drawSample(sample, g_iSample, pChannelDesc);
 				}
-				break;
+				obtainedChannels++;
 			}
 			// First 2/3 samples may be slightly inaccurate, avoid them for pot inputs
 			// Todo: check ADC config !
@@ -1003,6 +1057,8 @@ void getAndDrawSampleSlow()
 					drawTriggerArrow();
 			}
 		}
+		if (obtainedChannels == g_channelsCount)
+			break;
 	}
 
 	g_iSample++;

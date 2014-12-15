@@ -9,10 +9,13 @@
 typedef struct _CHANNEL_DESC {
 	int channel;
 	int bufSize;
-	int color[3];
 	uint16_t *curSamples;
 	uint16_t *oldSamples;
 	uint16_t *samples[2];
+	// color
+	uint8_t r;
+	uint8_t g;
+	uint8_t b;
 }CHANNEL_DESC;
 
 #endif
