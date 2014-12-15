@@ -228,6 +228,10 @@ uint16_t *AdcDma::GetReadBuffer()
 
 bool AdcDma::GetNextSample(uint16_t *sample, int *channel, CaptureState *state, bool *isTriggerSample)
 {
+	// Deal with trigger locally in slow mode
+
+	static TriggerState s_slowTriggerState = TriggerStateDisabled;
+
 	if (sample == NULL)
 		return false;
 
@@ -259,19 +263,51 @@ bool AdcDma::GetNextSample(uint16_t *sample, int *channel, CaptureState *state, 
 
 	// At this point we know we have available data
 
-	// Update trigger sample flag
-	if ( (isTriggerSample != NULL) &&
-		 (!m_bTriggerTimeout) &&
-		 (m_readBufIndex == m_triggerSampleBufIndex) &&
-		 (m_readSampleIndex == m_triggerSampleIndex) ) {
-		*isTriggerSample = true;
-	}
-
 	// And get sample
 	uint32_t rawSample = m_buffers[m_readBufIndex][m_readSampleIndex];
 	*sample = rawSample & 0x0FFF;
 	if (channel)
 		*channel = (rawSample & 0xF000) >> 12;
+
+	// Update trigger state
+
+	// This is the first read sample, init trigger state
+	if (m_readSampleIndex == 0 && m_readBufCount == 0) {
+		if (m_triggerState != TriggerStateDisabled) {
+			// A dirty trick to avoid handling compare interruptions since trigger
+			// is handled "manually"
+			m_triggerState = TriggerStateCapturing;
+			s_slowTriggerState = TriggerStateEnabled;
+			PF(DBG_TRIGGER, "entering enabled\r\n");
+		}
+	}
+	else if (*channel == m_triggerChannel) {
+		switch (s_slowTriggerState) {
+		case TriggerStateEnabled :
+		  {
+			if ( ((m_triggerMode == RisingEdge ) && (*sample < m_triggerVal)) ||
+				 ((m_triggerMode == FallingEdge) && (*sample > m_triggerVal)) ) {
+				s_slowTriggerState = TriggerStateArmed;
+				PF(DBG_TRIGGER, "entering armed\r\n");
+			}
+			break;
+		  }
+		case TriggerStateArmed :
+		  {
+			if ( ((m_triggerMode == RisingEdge ) && (*sample >= m_triggerVal)) ||
+				 ((m_triggerMode == FallingEdge) && (*sample <= m_triggerVal)) ) {
+				s_slowTriggerState = TriggerStateCapturing;
+				PF(DBG_TRIGGER, "entering capturing\r\n");
+				if (isTriggerSample != NULL) {
+					*isTriggerSample = true;
+				}
+			}
+			break;
+		  }
+		default :
+			break;
+		}
+	}
 
 	PF(DBG_SAMPLE, "Got raw sample 0x%x, sample %d, channel %d\r\n", rawSample, *sample, *channel);
 

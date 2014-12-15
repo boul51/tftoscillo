@@ -27,7 +27,8 @@
 #define TFT_HEIGHT  128
 
 // Pot and scope input pins
-#define SCOPE_CHANNEL       7
+#define SCOPE_CHANNEL_1     7
+#define SCOPE_CHANNEL_2     3
 #define FREQ_CHANNEL        6
 #define ADC_RATE_CHANNEL    5
 #define TRIG_CHANNEL        4
@@ -55,8 +56,8 @@ int g_scopeDrawMode = SCOPE_DRAW_MODE_FAST;
 
 // Tests show that ADC doesn't sample well with freq >= 1830000 Hz.
 // (Not so bad since nominal max rate is 1MHz)
-#define ADC_MIN_SAMPLE_RATE  100
-#define ADC_MAX_SAMPLE_RATE 1825000
+#define ADC_MIN_SAMPLE_RATE  10
+#define ADC_MAX_SAMPLE_RATE 100
 //#define ADC_MAX_SAMPLE_RATE 1000
 uint g_adcMinSampleRate = ADC_MIN_SAMPLE_RATE;
 uint g_adcMaxSampleRate = ADC_MAX_SAMPLE_RATE;
@@ -157,13 +158,16 @@ void setup() {
 	g_genSigDma = new GenSigDma();
 	//g_genSigDma->SetTimerChannel(1);
 
-	int adcChannel = SCOPE_CHANNEL;
+	int adcChannel = SCOPE_CHANNEL_1;
 	g_adcDma = AdcDma::GetInstance();
 	g_adcDma->SetAdcChannels(&adcChannel, 1);
 	g_adcDma->SetTimerChannel(1);
 
 	updateAdcSampleRate(true, -1);
 	updateSignalFreq(true, -1);
+	updateTriggerValue(-1);
+
+	enterScopeDrawMode(SCOPE_DRAW_MODE_SLOW);
 }
 
 void defaultHandler()
@@ -392,17 +396,21 @@ bool updateSignalFreq(bool bForceUpdate, int potVal)
 	return bFreqChanged;
 }
 
-void updateTriggerValue()
+bool updateTriggerValue(int potVal)
 {
-	int potVal = 0;
 	static int prevPotVal = 0;
+	bool bTgChanged = false;
 
-	g_adcDma->ReadSingleValue(TRIG_CHANNEL, &potVal);
+	if (potVal < 0)
+		g_adcDma->ReadSingleValue(TRIG_CHANNEL, &potVal);
 
 	if (abs(potVal - prevPotVal) > 100) {
 		g_triggerVal = potVal;
 		prevPotVal = potVal;
+		bTgChanged = true;
 	}
+
+	return bTgChanged;
 }
 
 bool updateAdcSampleRate(bool bForceUpdate, int potVal)
@@ -824,7 +832,7 @@ void enterScopeDrawMode(int drawMode)
 
 void getAndDrawSampleSlow()
 {
-	int channels[] = {SCOPE_CHANNEL, FREQ_CHANNEL, ADC_RATE_CHANNEL};
+	int channels[] = {SCOPE_CHANNEL_1, FREQ_CHANNEL, ADC_RATE_CHANNEL, TRIG_CHANNEL};
 	int channelsCount = sizeof(channels) / sizeof(channels[0]);
 
 	g_adcDma->SetAdcChannels(channels, channelsCount);
@@ -833,27 +841,11 @@ void getAndDrawSampleSlow()
 
 		g_adcDma->Stop();
 
-		// compute buffer size to have one trigger every tTrig secs with bufCount buffers
-		float tTrig = 0.1; // Try to have one trigger every 1/10s
-
-		int   bufCount = ADC_DMA_DEF_BUF_COUNT;
-		float fBufSize = (float)g_adcSampleRate * tTrig / (float)bufCount * (float)channelsCount;
-
-		int bufSize = (int)ceil(fBufSize);
-		if (bufSize > ADC_DMA_DEF_BUF_SIZE)
-			bufSize = ADC_DMA_DEF_BUF_SIZE;
-
-		// Make sure we have enough samples to fill the screen..
-		// use *2 to take x-position into account, todo: compute this precisely
-		if (bufSize * bufCount / channelsCount < TFT_WIDTH * 2) {
-			bufSize = TFT_WIDTH * 2 / bufCount * channelsCount;
-		}
-
-		PF(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
-
 		g_adcDma->SetSampleRate(g_adcSampleRate);
-		g_adcDma->SetBuffers(bufCount, bufSize);
+		g_adcDma->SetBuffers(ADC_DMA_DEF_BUF_COUNT, ADC_DMA_DEF_BUF_SIZE);
+		g_adcDma->SetTrigger(g_triggerVal, g_triggerMode, SCOPE_CHANNEL_1, 5000);
 		g_adcDma->Start();
+		g_adcDma->TriggerEnable(true);
 
 		erasePrevSamples();
 
@@ -868,15 +860,35 @@ void getAndDrawSampleSlow()
 	int channel;
 	int freqPotVal = -1;
 	int srPotVal = -1;
+	int tgPotVal = -1;
 
 	bool bSrChanged = false;
 	bool bFreqChanged = false;
+	bool bTgChanged = false;
+
+	static bool s_gotTriggerSample = false;
+
+	if (g_iSample == 0) {
+		s_gotTriggerSample = false;
+		g_triggerStatus = TRIGGER_STATUS_NONE;
+		drawTexts(false);
+	}
 
 	// Loop until we get a sample, and channel is SCOPE_CHANNEL
 	for (;;) {
 		if (g_adcDma->GetNextSample(&sample, &channel, NULL, &isTgSample)) {
-			if (channel == SCOPE_CHANNEL) {
-				drawSample(sample, g_iSample);
+			if (channel == SCOPE_CHANNEL_1) {
+				if (isTgSample) {
+					g_iSample = 0;
+				}
+				if (!s_gotTriggerSample && isTgSample) {
+					g_triggerStatus = TRIGGER_STATUS_TRIGGERED;
+					drawTexts(false);
+				}
+				s_gotTriggerSample |= isTgSample;
+				if (s_gotTriggerSample) {
+					drawSample(sample, g_iSample);
+				}
 				break;
 			}
 			// First 2/3 samples may be slightly inaccurate, avoid them for pot inputs
@@ -890,6 +902,12 @@ void getAndDrawSampleSlow()
 			else if (channel == ADC_RATE_CHANNEL) {
 				srPotVal = sample;
 				bSrChanged = updateAdcSampleRate(false, srPotVal);
+			}
+			else if (channel == TRIG_CHANNEL) {
+				tgPotVal = sample;
+				bTgChanged = updateTriggerValue(tgPotVal);
+				if (bTgChanged)
+					drawTriggerArrow();
 			}
 		}
 	}
@@ -907,8 +925,6 @@ void getAndDrawSampleSlow()
 	if (g_iSample == TFT_WIDTH) {
 		g_adcDma->Stop();
 		g_iSample = 0;
-
-		updateTriggerValue();
 	}
 }
 
@@ -916,11 +932,14 @@ void getAndDrawSamplesFast()
 {
 	bool bTriggerTimeout;
 
+	int channels [] = {SCOPE_CHANNEL_1};
+	int channelsCount = sizeof(channels) / sizeof(channels[0]);
+
 	// compute buffer size to have one trigger every tTrig secs with bufCount buffers
 	float tTrig = 0.1; // Try to have one trigger every 1/10s
 
 	int   bufCount = ADC_DMA_DEF_BUF_COUNT;
-	float fBufSize = (float)g_adcSampleRate * tTrig / (float)bufCount;
+	float fBufSize = (float)g_adcSampleRate * tTrig / (float)bufCount * (float)channelsCount;
 
 	int bufSize = (int)ceil(fBufSize);
 	if (bufSize > ADC_DMA_DEF_BUF_SIZE)
@@ -928,20 +947,19 @@ void getAndDrawSamplesFast()
 
 	// Make sure we have enough samples to fill the screen..
 	// use *2 to take x-position into account, todo: compute this precisely
-	if (bufSize * bufCount < TFT_WIDTH * 2) {
-		bufSize = TFT_WIDTH * 2 / bufCount;
+	if (bufSize * bufCount < TFT_WIDTH * 2 * channelsCount) {
+		bufSize = TFT_WIDTH * 2 * channelsCount / bufCount;
 	}
 
 	PF(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
 
 	g_adcDma->Stop();
 
-	int channel = SCOPE_CHANNEL;
-	g_adcDma->SetAdcChannels(&channel, 1);
+	g_adcDma->SetAdcChannels(channels, channelsCount);
 	g_adcDma->SetSampleRate(g_adcSampleRate);
 	g_adcDma->SetBuffers(bufCount, bufSize);
 	g_adcDma->Start();
-	g_adcDma->SetTrigger(g_triggerVal, g_triggerMode, SCOPE_CHANNEL, TRIGGER_TIMEOUT);
+	g_adcDma->SetTrigger(g_triggerVal, g_triggerMode, SCOPE_CHANNEL_1, TRIGGER_TIMEOUT);
 	g_adcDma->SetTriggerPreBuffersCount(0);
 	g_adcDma->TriggerEnable(true);
 
@@ -964,7 +982,7 @@ void getAndDrawSamplesFast()
 
 	int drawnSamples = 0;
 
-	// Use new buffer before sampling
+	// Use new buffer before drawing
 	swapSampleBuffer();
 
 	int iLoop = 0;
@@ -1003,8 +1021,6 @@ void getAndDrawSamplesFast()
 
 	g_adcDma->Stop();
 
-	//while (g_adcDma->GetReadBuffer()) {}
-
 	drawBegin();
 	drawTriggerArrow();
 	drawSamples();
@@ -1020,7 +1036,7 @@ void loop()
 	else {
 		getAndDrawSamplesFast();
 		updateSignalFreq(false, -1);
-		updateTriggerValue();
+		updateTriggerValue(-1);
 		updateAdcSampleRate(false, -1);
 	}
 
