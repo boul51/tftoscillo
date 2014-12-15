@@ -2,6 +2,7 @@
 #include "AdcDma.h"
 #include <LibDbg.h>
 
+// Debug zones
 #define DBG_INIT	false
 #define DBG_IRQ		false
 #define DBG_TIMER	false
@@ -10,8 +11,6 @@
 #define DBG_WRITE	false
 #define DBG_CHANNEL false
 #define DBG_SAMPLE	false
-
-#define pf(doPrint, ...) LibDbg::pf(doPrint, __FUNCTION__, __VA_ARGS__)
 
 typedef struct _ADCDMA_PRESCALER {
 	int bitMask;
@@ -121,7 +120,7 @@ void AdcDma::findTriggerSample()
 	}
 
 	if (!bFound) {
-		pf(DBG_TRIGGER, "did not find trigger sample !\r\n");
+		PF(DBG_TRIGGER, "did not find trigger sample !\r\n");
 		return;
 	}
 
@@ -150,17 +149,17 @@ void AdcDma::findTriggerSample()
 bool AdcDma::SetBuffers(int bufCount, int bufSize)
 {
 	if (m_captureState != CaptureStateStopped) {
-		pf(DBG_INIT, "not in stopped state\r\n");
+		PF(DBG_INIT, "not in stopped state\r\n");
 		return false;
 	}
 
 	if (bufCount > ADC_DMA_DEF_BUF_COUNT) {
-		pf(DBG_INIT, "bufCount if bigger than ADC_DMA_DEF_BUF_COUNT (%d)\r\n", ADC_DMA_DEF_BUF_COUNT);
+		PF(DBG_INIT, "bufCount if bigger than ADC_DMA_DEF_BUF_COUNT (%d)\r\n", ADC_DMA_DEF_BUF_COUNT);
 		return false;
 	}
 
 	if (bufSize > ADC_DMA_DEF_BUF_SIZE) {
-		pf(DBG_INIT, "bufSize if bigger than ADC_DMA_DEF_BUF_SIZE (%d)\r\n", ADC_DMA_DEF_BUF_SIZE);
+		PF(DBG_INIT, "bufSize if bigger than ADC_DMA_DEF_BUF_SIZE (%d)\r\n", ADC_DMA_DEF_BUF_SIZE);
 		return false;
 	}
 
@@ -173,12 +172,12 @@ bool AdcDma::SetBuffers(int bufCount, int bufSize)
 bool AdcDma::SetTimerChannel(int timerChannel)
 {
 	if (timerChannel > ADC_DMA_MAX_TIMER_CHANNEL) {
-		pf(DBG_TIMER, "invalid channel %d !\r\n", timerChannel);
+		PF(DBG_TIMER, "invalid channel %d !\r\n", timerChannel);
 		return false;
 	}
 
 	if (m_captureState != CaptureStateStopped) {
-		pf(DBG_TIMER, "can't set timer channel while running !\r\n");
+		PF(DBG_TIMER, "can't set timer channel while running !\r\n");
 		return false;
 	}
 
@@ -197,7 +196,7 @@ bool AdcDma::SetTimerChannel(int timerChannel)
 		trgSel = ADC_TRIG_TIO_CH_2;
 		break;
 	default :
-		pf(DBG_TIMER, "invalid timer channel %d !\r\n", m_timerChannel);
+		PF(DBG_TIMER, "invalid timer channel %d !\r\n", m_timerChannel);
 		return false;
 	}
 
@@ -259,6 +258,7 @@ void AdcDma::Stop()
 	ev.eventKind = TriggerEventKindDisable;
 	triggerUpdateState(&ev);
 	*/
+
 	//m_triggerState = TriggerStateDisabled;
 }
 
@@ -297,7 +297,7 @@ bool AdcDma::ReadSingleValue(int adcChannel, int *value)
 bool AdcDma::EnableChannel(int channel, bool bEnable)
 {
 	if (channel > ADC_DMA_MAX_ADC_CHANNEL) {
-		pf(DBG_CHANNEL, "invalid channel %d !\r\n", channel);
+		PF(DBG_CHANNEL, "invalid channel %d !\r\n", channel);
 		return false;
 	}
 
@@ -338,7 +338,7 @@ bool AdcDma::SetTrigger(int value, TriggerMode mode, int triggerChannel, int tri
 		m_triggerTimeoutMaxInts = 0;
 	}
 
-	pf(DBG_TRIGGER, "Calculated m_triggerTimeoutMaxInts %d\r\n", m_triggerTimeoutMaxInts);
+	PF(DBG_TRIGGER, "Calculated m_triggerTimeoutMaxInts %d\r\n", m_triggerTimeoutMaxInts);
 
 	uint16_t v = (uint16_t)value;
 
@@ -364,7 +364,7 @@ bool AdcDma::TriggerEnable(bool bEnable)
 
 void AdcDma::triggerSetState(TriggerState state)
 {
-	pf(DBG_TRIGGER, "Trigger state change %s -> %s%s\r\n", StrTriggerState[m_triggerState], StrTriggerState[state], m_bTriggerTimeout ? " (timeout)" : "");
+	PF(DBG_TRIGGER, "Trigger state change %s -> %s%s\r\n", StrTriggerState[m_triggerState], StrTriggerState[state], m_bTriggerTimeout ? " (timeout)" : "");
 	m_triggerState = state;
 }
 
@@ -479,7 +479,7 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 		*/
 
 	default :
-		pf(DBG_TRIGGER, "Invalid current state !\r\n");
+		PF(DBG_TRIGGER, "Invalid current state !\r\n");
 		break;
 	}
 
@@ -487,7 +487,7 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 
 _unhandledEvent :
 
-	pf(DBG_TRIGGER, "Unhandled event from state %s\r\n", StrTriggerState[m_triggerState]);
+	PF(DBG_TRIGGER, "Unhandled event from state %s\r\n", StrTriggerState[m_triggerState]);
 	return;
 }
 
@@ -531,7 +531,7 @@ void AdcDma::triggerEnterPreArmed(TriggerEvent *event)
 		cmpMode = ADC_EMR_CMPMODE_LOW;
 		break;
 	default :
-		pf(DBG_TRIGGER, "invalid trigger mode !\r\n");
+		PF(DBG_TRIGGER, "invalid trigger mode !\r\n");
 		return;
 	}
 
@@ -605,7 +605,7 @@ void AdcDma::triggerEnterDone(TriggerEvent *event)
 /*
 void AdcDma::triggerEnterReading(TriggerEvent *event)
 {
-	pf("%s++\r\n", __FUNCTION__);
+	PF("%s++\r\n", __FUNCTION__);
 	triggerSetState(TriggerStateReading);
 }
 */
@@ -623,7 +623,7 @@ bool AdcDma::AllocateBuffers(int bufCount, int bufSize, bool bForceAllocate)
 	// Check parameters:
 	if ( (bufCount == 0) ||
 		 (bufSize  == 0) ) {
-		pf(DBG_INIT, "AdcDma::AllocateBuffers: Invalid parameters !\r\n");
+		PF(DBG_INIT, "AdcDma::AllocateBuffers: Invalid parameters !\r\n");
 		return false;
 	}
 
@@ -633,11 +633,11 @@ bool AdcDma::AllocateBuffers(int bufCount, int bufSize, bool bForceAllocate)
 	for (int iBuf = 0; iBuf < m_bufCount; iBuf++) {
 		m_buffers[iBuf] = (uint16_t *)malloc(m_bufSize * sizeof(uint16_t));
 		if (m_buffers[iBuf] == NULL) {
-			pf(DBG_INIT, "AdcDma::AllocateBuffers: Failed allocating buffer %d, size %d !\r\n", iBuf, m_bufSize);
+			PF(DBG_INIT, "AdcDma::AllocateBuffers: Failed allocating buffer %d, size %d !\r\n", iBuf, m_bufSize);
 			DeleteBuffers();
 			return false;
 		}
-		pf(DBG_INIT, "AdcDma::AllocateBuffers: m_buffers[%d]: 0x%08x\r\n", iBuf, m_buffers[iBuf]);
+		PF(DBG_INIT, "AdcDma::AllocateBuffers: m_buffers[%d]: 0x%08x\r\n", iBuf, m_buffers[iBuf]);
 	}
 
 	return true;
@@ -694,18 +694,18 @@ bool AdcDma::SetAdcChannels(int *adcChannels, int adcChannelsCount)
 bool AdcDma::SetSampleRate(int sampleRate)
 {
 	if (sampleRate > ADC_DMA_MAX_SAMPLE_RATE) {
-		pf(DBG_INIT, "sampleRate is bigger than ADC_DMA_MAX_SAMPLE_RATE (%d)\r\n", ADC_DMA_MAX_SAMPLE_RATE);
+		PF(DBG_INIT, "sampleRate is bigger than ADC_DMA_MAX_SAMPLE_RATE (%d)\r\n", ADC_DMA_MAX_SAMPLE_RATE);
 		return false;
 	}
 
 	/*
 	if (m_captureState != CaptureStateStopped) {
-		pf(DBG_INIT, "Not in stopped state !\r\n");
+		PF(DBG_INIT, "Not in stopped state !\r\n");
 		return false;
 	}
 	*/
 
-	pf(DBG_INIT, "Setting sample rate %d\r\n", sampleRate);
+	PF(DBG_INIT, "Setting sample rate %d\r\n", sampleRate);
 
 	m_sampleRate = sampleRate;
 
@@ -746,18 +746,18 @@ bool AdcDma::ConfigureTimer()
 	}
 
 	if (!bFound) {
-		pf(DBG_TIMER, "No prescaler found !\r\n");
+		PF(DBG_TIMER, "No prescaler found !\r\n");
 		return false;
 	}
 
 	// We got prescaler, now calculate value for rc
 	int RC = MCLK / (m_sampleRate * prescaler.div);
 
-	pf(DBG_TIMER, "AdcDma: Setting up timer with parameters:\r\n");
-	pf(DBG_TIMER, " - Timer channel %d\r\n", m_timerChannel);
-	pf(DBG_TIMER, " - Sample rate %d\r\n", m_sampleRate);
-	pf(DBG_TIMER, " - Div %d\r\n", prescaler.div);
-	pf(DBG_TIMER, " - RC %d\r\n", RC);
+	PF(DBG_TIMER, "AdcDma: Setting up timer with parameters:\r\n");
+	PF(DBG_TIMER, " - Timer channel %d\r\n", m_timerChannel);
+	PF(DBG_TIMER, " - Sample rate %d\r\n", m_sampleRate);
+	PF(DBG_TIMER, " - Div %d\r\n", prescaler.div);
+	PF(DBG_TIMER, " - RC %d\r\n", RC);
 
 	// And write data to timer controller
 
@@ -903,7 +903,7 @@ uint16_t *AdcDma::GetReadBuffer()
 	case TriggerStateDisabled :
 	case TriggerStateReading :
 	  {
-		//pf("Write index %d, read index %d\r\n", m_writeBufIndex, m_readBufIndex);
+		//PF("Write index %d, read index %d\r\n", m_writeBufIndex, m_readBufIndex);
 		if (m_readBufIndex != m_writeBufIndex) {
 			buf = m_buffers[m_readBufIndex];
 		}
@@ -914,12 +914,12 @@ uint16_t *AdcDma::GetReadBuffer()
 	  {
 		// There was not a full buffer written yet
 		if (m_writeBufIndex == m_startBufIndex) {
-			pf(DBG_READ, "m_writeBufIndex == m_startBufIndex\r\n");
+			PF(DBG_READ, "m_writeBufIndex == m_startBufIndex\r\n");
 			break;
 		}
 		// We've already returned available buffer
 		if ( ((m_readBufIndex + 1) % m_bufCount) == m_writeBufIndex) {
-			pf(DBG_READ, "m_readBufIndex == m_writeBufIndex");
+			PF(DBG_READ, "m_readBufIndex == m_writeBufIndex");
 			break;
 		}
 		buf = m_buffers[m_readBufIndex];
@@ -934,7 +934,7 @@ uint16_t *AdcDma::GetReadBuffer()
 			buf = m_buffers[m_readBufIndex];
 			AdvanceReadBuffer();
 		}
-		//pf("Returning buf at index %d, write buf index %d\r\n", m_readBufIndex, m_writeBufIndex);
+		//PF("Returning buf at index %d, write buf index %d\r\n", m_readBufIndex, m_writeBufIndex);
 		//m_readBufIndex++;
 		//if (m
 		// Notify trigger machine state that one buffer was read to enter state TriggerStateReading
@@ -944,7 +944,7 @@ uint16_t *AdcDma::GetReadBuffer()
 	  }
 	default :
 	  {
-		pf(DBG_READ, "Can't get read buffer in state %s\r\n", StrTriggerState[m_triggerState]);
+		PF(DBG_READ, "Can't get read buffer in state %s\r\n", StrTriggerState[m_triggerState]);
 		break;
 	  }
 	}
@@ -983,7 +983,7 @@ bool AdcDma::GetNextSample(uint16_t *sample, int *channel, CaptureState *state, 
 		// Calculate number of available samples in buffer:
 		int samplesInBuffer = m_bufSize - rcr - m_readSampleIndex;
 
-		pf(DBG_READ, "%d samples in buffer\r\n", samplesInBuffer);
+		PF(DBG_READ, "%d samples in buffer\r\n", samplesInBuffer);
 
 		if (samplesInBuffer <= 0) {
 			return false;
@@ -1006,7 +1006,7 @@ bool AdcDma::GetNextSample(uint16_t *sample, int *channel, CaptureState *state, 
 	if (channel)
 		*channel = (rawSample & 0xF000) >> 12;
 
-	pf(DBG_SAMPLE, "Got raw sample 0x%x, sample %d, channel %d\r\n", rawSample, *sample, *channel);
+	PF(DBG_SAMPLE, "Got raw sample 0x%x, sample %d, channel %d\r\n", rawSample, *sample, *channel);
 
 	m_readSampleIndex++;
 
@@ -1035,7 +1035,7 @@ bool AdcDma::AdvanceReadBuffer()
 	}
 	*/
 
-	//pf("Advanced readBuffer, m_readBufIndex is now %d\r\n", m_readBufIndex);
+	//PF("Advanced readBuffer, m_readBufIndex is now %d\r\n", m_readBufIndex);
 
 	return true;
 }
@@ -1044,7 +1044,7 @@ bool AdcDma::AdvanceWriteBuffer()
 {
 	// Use + 2 here since we give pointer and next pointer to DMA controller
 	if ( ((m_writeBufIndex + 2) % m_bufCount) == m_readBufIndex) {
-		pf(DBG_WRITE, "Would overwrite non read data (R %d, W %d)\r\n", m_readBufIndex, m_writeBufIndex);
+		PF(DBG_WRITE, "Would overwrite non read data (R %d, W %d)\r\n", m_readBufIndex, m_writeBufIndex);
 		return false;
 	}
 
@@ -1052,14 +1052,14 @@ bool AdcDma::AdvanceWriteBuffer()
 	if (m_writeBufIndex == m_bufCount)
 		m_writeBufIndex = 0;
 
-	//pf("Advanced writeBuffer, m_writeBufIndex is now %d\r\n", m_writeBufIndex);
+	//PF("Advanced writeBuffer, m_writeBufIndex is now %d\r\n", m_writeBufIndex);
 
-	//pf("AdcDma::AdvanceWriteBuffer: Setting next RX pointer %d (0x%08x)\r\n", m_writeBufIndex, (uint32_t)m_buffers[m_writeBufIndex]);
+	//PF("AdcDma::AdvanceWriteBuffer: Setting next RX pointer %d (0x%08x)\r\n", m_writeBufIndex, (uint32_t)m_buffers[m_writeBufIndex]);
 
 	// Current write buffer was automatically set by DMA controller.
 	// Only update next pointer
 
-	pf(DBG_WRITE, "Setting buffer %d to RNPR\r\n", (m_writeBufIndex + 1)% m_bufCount);
+	PF(DBG_WRITE, "Setting buffer %d to RNPR\r\n", (m_writeBufIndex + 1)% m_bufCount);
 
 	ADC->ADC_RNPR = (uint32_t)m_buffers[(m_writeBufIndex + 1) % m_bufCount];
 	ADC->ADC_RNCR = m_bufSize;
@@ -1070,12 +1070,12 @@ bool AdcDma::AdvanceWriteBuffer()
 bool AdcDma::SetTriggerPreBuffersCount(int triggerPreBuffersCount)
 {
 	if (triggerPreBuffersCount + 2 > m_bufCount) {
-		pf(DBG_TRIGGER, "Too big value for triggerPreBuffersCount");
+		PF(DBG_TRIGGER, "Too big value for triggerPreBuffersCount");
 		return false;
 	}
 
 	if (triggerPreBuffersCount < 0) {
-		pf(DBG_TRIGGER, "Negative value for triggerPreBuffersCount");
+		PF(DBG_TRIGGER, "Negative value for triggerPreBuffersCount");
 		return false;
 	}
 
@@ -1087,12 +1087,12 @@ bool AdcDma::SetTriggerPreBuffersCount(int triggerPreBuffersCount)
 bool AdcDma::SetTriggerPreSamplesCount(int triggerPreSamplesCount)
 {
 	if (triggerPreSamplesCount < 0) {
-		pf(DBG_TRIGGER, "Negative value for triggerPreSamplesCount\r\n");
+		PF(DBG_TRIGGER, "Negative value for triggerPreSamplesCount\r\n");
 		return false;
 	}
 
 	if (!SetTriggerPreBuffersCount(triggerPreSamplesCount / m_bufSize + 1)) {
-		pf(DBG_TRIGGER, "Failed in  SetTriggerPreBuffersCount\r\n");
+		PF(DBG_TRIGGER, "Failed in  SetTriggerPreBuffersCount\r\n");
 		return false;
 	}
 
@@ -1120,7 +1120,7 @@ void AdcDma::HandleInterrupt()
 
 	if (isr & ADC_ISR_COMPE) {
 
-		pf(DBG_IRQ, "Got a ADC_ISR_COMPE interrupt\r\n");
+		PF(DBG_IRQ, "Got a ADC_ISR_COMPE interrupt\r\n");
 
 		// Get current sample
 		int bufIndex = m_writeBufIndex;
@@ -1143,7 +1143,7 @@ void AdcDma::HandleInterrupt()
 
 	if (isr & ADC_ISR_RXBUFF) {
 
-		pf(DBG_IRQ, "Got a ADC_ISR_RXBUFF interrupt\r\n");
+		PF(DBG_IRQ, "Got a ADC_ISR_RXBUFF interrupt\r\n");
 
 		switch (m_triggerState) {
 
@@ -1154,7 +1154,7 @@ void AdcDma::HandleInterrupt()
 			break;
 
 		default :
-			pf(DBG_IRQ, "ADC_ISR_RX_BUFF is set, stopping acquisition !\r\n");
+			PF(DBG_IRQ, "ADC_ISR_RX_BUFF is set, stopping acquisition !\r\n");
 			break;
 		}
 
@@ -1171,7 +1171,7 @@ void AdcDma::HandleInterrupt()
 
 	if (isr & ADC_ISR_ENDRX) {
 
-		pf(DBG_IRQ, "ADC_ISR_ENDRX, IMR 0x%08x, trigger state %s\r\n", ADC->ADC_IMR, StrTriggerState[m_triggerState]);
+		PF(DBG_IRQ, "ADC_ISR_ENDRX, IMR 0x%08x, trigger state %s\r\n", ADC->ADC_IMR, StrTriggerState[m_triggerState]);
 
 		// Increase number of written buffers, we'll use that to know if we still have data to read
 		m_writeBufCount++;

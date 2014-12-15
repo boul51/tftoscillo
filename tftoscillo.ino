@@ -10,9 +10,8 @@
 #include "tftoscillo.h"
 
 /**** DEFINES ****/
-// Debug definitions
-#define pf(doPrint, ...) LibDbg::pf(doPrint, __FUNCTION__, __VA_ARGS__)
 
+// Debug zones
 #define DBG_LOOP	false
 #define DBG_VERBOSE	false
 #define DBG_TEXT	false
@@ -569,7 +568,7 @@ void drawTexts(bool bForceDrawText)
 			}
 			s += String("fps");
 			s.toCharArray(textBuf, 15);
-			pf(DBG_TEXT, "drawing text at %d:%d\r\n", 10, TEXT_DOWN_Y_OFFSET);
+			PF(DBG_TEXT, "drawing text at %d:%d\r\n", 10, TEXT_DOWN_Y_OFFSET);
 			TFTscreen.text(textBuf, 10, TEXT_DOWN_Y_OFFSET);
 		}
 	}
@@ -596,7 +595,7 @@ void drawTexts(bool bForceDrawText)
 				}
 			}
 			s.toCharArray(textBuf, 15);
-			pf(DBG_TEXT, "drawing text at %d:%d\r\n", 10, TEXT_DOWN_Y_OFFSET);
+			PF(DBG_TEXT, "drawing text at %d:%d\r\n", 10, TEXT_DOWN_Y_OFFSET);
 			TFTscreen.text(textBuf, TFT_WIDTH / 2, TEXT_DOWN_Y_OFFSET);
 		}
 	}
@@ -632,7 +631,8 @@ void drawGrid()
 	// Draw horizontal grid (horizontal lines)
 	int yStart = HGRID_START;
 	int yOffset = 0;
-	while ( (yStart + yOffset < TFT_HEIGHT) || (yStart - yOffset > 0) ) {
+	int margin = 10;
+	while ( (yStart + yOffset + margin < TFT_HEIGHT) || (yStart - yOffset > margin) ) {
 
 		if (loop % secLoop == 0) {
 			TFTscreen.stroke(HGRID_COLOR);
@@ -644,9 +644,9 @@ void drawGrid()
 
 		TFTscreen.line(0,  yStart + yOffset, TFT_WIDTH, yStart + yOffset);
 		TFTscreen.line(0,  yStart - yOffset, TFT_WIDTH, yStart - yOffset);
-		if (yStart + yOffset < TFT_HEIGHT)
+		if (yStart + yOffset + margin < TFT_HEIGHT)
 			maxY = yStart + yOffset;
-		if (yStart - yOffset > 0)
+		if (yStart - yOffset > margin)
 			minY = yStart - yOffset;
 		yOffset += HGRID_INTERVAL;
 	}
@@ -849,7 +849,7 @@ void getAndDrawSampleSlow()
 			bufSize = TFT_WIDTH * 2 / bufCount * channelsCount;
 		}
 
-		pf(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
+		PF(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
 
 		g_adcDma->SetSampleRate(g_adcSampleRate);
 		g_adcDma->SetBuffers(bufCount, bufSize);
@@ -932,7 +932,7 @@ void getAndDrawSamplesFast()
 		bufSize = TFT_WIDTH * 2 / bufCount;
 	}
 
-	pf(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
+	PF(DBG_LOOP, "Setting bufSize %d, sample rate %d\r\n", bufSize, g_adcSampleRate);
 
 	g_adcDma->Stop();
 
@@ -955,7 +955,7 @@ void getAndDrawSamplesFast()
 	if (!bTriggerTimeout) {
 		g_adcDma->GetTriggerSampleAddress(&triggerBufAddress, &triggerSampleIndex);
 		g_triggerStatus = TRIGGER_STATUS_TRIGGERED;
-		pf(DBG_LOOP, "TriggerSample buf 0x%08x, index %d\r\n", triggerBufAddress, triggerSampleIndex);
+		PF(DBG_LOOP, "TriggerSample buf 0x%08x, index %d\r\n", triggerBufAddress, triggerSampleIndex);
 	}
 	else {
 		g_triggerStatus = TRIGGER_STATUS_TIMEOUT;
@@ -975,7 +975,7 @@ void getAndDrawSamplesFast()
 
 		buf = g_adcDma->GetReadBuffer();
 
-		pf(DBG_LOOP && DBG_VERBOSE, "Got buffer 0x%08x at loop %d, size %d\r\n", buf, iLoop, bufSize);
+		PF(DBG_LOOP && DBG_VERBOSE, "Got buffer 0x%08x at loop %d, size %d\r\n", buf, iLoop, bufSize);
 		iLoop++;
 
 		if (buf == NULL) {
@@ -998,7 +998,7 @@ void getAndDrawSamplesFast()
 		mapBufferValues(drawnSamples, buf, count);
 		drawnSamples += count;
 
-		pf(DBG_LOOP && DBG_VERBOSE, "loop %d, drawnSamples: %d\r\n", iLoop, drawnSamples);
+		PF(DBG_LOOP && DBG_VERBOSE, "loop %d, drawnSamples: %d\r\n", iLoop, drawnSamples);
 	}
 
 	g_adcDma->Stop();

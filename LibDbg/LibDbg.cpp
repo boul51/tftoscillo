@@ -3,10 +3,6 @@
 #include <Arduino.h>
 #include <stdarg.h>
 
-// Set to 0 to disable debug
-// Set to 1 to enable debug
-#define LIBDBG_ENABLE	1
-
 #if LIBDBG_ENABLE == 1
 
 void LibDbg::pf(bool doPrint, const char *caller, const char *fmt, ... )
