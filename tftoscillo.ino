@@ -203,15 +203,14 @@ void setup() {
 	g_adcDma->SetAdcChannels(&adcChannel, 1);
 	g_adcDma->SetTimerChannel(1);
 
+	// Call drawGrid to update g_minY and g_maxY
+	drawGrid();
+
 	enterScopeDrawMode(SCOPE_DRAW_MODE_SLOW);
 
 	updateAdcSampleRate(true, -1);
 	updateSignalFreq(true, -1);
 	updateTriggerValue(-1);
-
-	// Call drawGrid to update g_minY and g_maxY
-	drawGrid();
-
 }
 
 void defaultHandler()
@@ -589,7 +588,7 @@ void drawTriggerArrow()
 			TFTscreen.stroke(TRIGGER_COLOR);
 			y = g_triggerVal;
 		}
-		y = map(y, 0, ANALOG_MAX_VAL, TFT_HEIGHT - 1, 0);
+		y = map(y, 0, ANALOG_MAX_VAL, g_maxY, g_minY);
 		TFTscreen.line(0, y, TRIGGER_ARROW_LEN, y);
 
 		/* Use this to draw arrow towards right */
