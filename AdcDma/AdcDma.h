@@ -166,6 +166,7 @@ private :
 	void triggerEnableInterrupt();
 	void triggerHandleInterrupt(int bufIndex, int sampleIndex);
 	void triggerFindTriggerSample();
+	void updateAdcTimerChannel();
 };
 
 #endif

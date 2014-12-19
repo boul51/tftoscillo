@@ -130,6 +130,10 @@ bool GenSigDma::SetTimerChannel(int timerChannel)
 
 	m_timerChannel = timerChannel;
 
+	updateDacTimerChannel();
+
+	SetupTimer();
+
 	return true;
 }
 
@@ -288,7 +292,7 @@ bool GenSigDma::SetupTimer()
 
 	// And write data to timer controller
 
-	pmc_enable_periph_clk (TC_INTERFACE_ID + 0*3+m_timerChannel) ;  // clock the TC0 channel for DACC 0
+	pmc_enable_periph_clk (TC_INTERFACE_ID + m_timerChannel) ;  // clock the TC0 channel for DACC 0
 
 	TcChannel * t = &(TC0->TC_CHANNEL)[m_timerChannel];  // pointer to TC0 registers for its channel 0
 	t->TC_CCR = TC_CCR_CLKDIS;              // disable internal clocking during setup
@@ -422,6 +426,16 @@ bool GenSigDma::SetupTimer()
 
 #endif
 
+void GenSigDma::updateDacTimerChannel()
+{
+	uint32_t mr = DACC->DACC_MR;
+
+	mr &= ~DACC_MR_TRGSEL_Msk;
+	mr |= DACC_MR_TRGSEL(m_timerChannel + 1);	// +1 since 0 is external trigger
+
+	DACC->DACC_MR = mr;
+}
+
 bool GenSigDma::SetupDacc() {
 	pmc_enable_periph_clk (DACC_INTERFACE_ID) ; // start clocking DAC
 	DACC->DACC_CR = DACC_CR_SWRST ;  // reset DAC
@@ -446,7 +460,6 @@ bool GenSigDma::SetupDacc() {
 	}
 
 	DACC->DACC_MR = (0x1 << 0)  |   // Trigger enable
-			((0x1 + m_timerChannel) << 1)  |   // Trigger on TIO output of TC0 Channel 0
 			(0x0 << 4)  |   // Half word transfer
 			(0x0 << 5)  |   // Disable sleep mode
 			(0x1 << 6)  |   // Fast wake up sleep mode
@@ -455,6 +468,9 @@ bool GenSigDma::SetupDacc() {
 			(0x0 << 20) |   // Disable tag mode
 			(0x0 << 21) |   // Max speed mode
 			(0x3F << 24);    // Startup time
+
+	// Setup DACC_MR timer channel selection
+	updateDacTimerChannel();
 
 	return true;
 }

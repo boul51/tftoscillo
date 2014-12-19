@@ -126,6 +126,7 @@ private :
 	void InitStats();
 	void ResetStats();
 	void DisplayStats(int sec);
+	void updateDacTimerChannel();
 };
 
 // Debug declarations

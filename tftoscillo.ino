@@ -196,12 +196,12 @@ void setup() {
 	// Modified TFT library to set SPI clock divider to 1
 
 	g_genSigDma = new GenSigDma();
-	//g_genSigDma->SetTimerChannel(1);
+	g_genSigDma->SetTimerChannel(1);
 
 	int adcChannel = SCOPE_CHANNEL_1;
 	g_adcDma = AdcDma::GetInstance();
 	g_adcDma->SetAdcChannels(&adcChannel, 1);
-	g_adcDma->SetTimerChannel(1);
+	g_adcDma->SetTimerChannel(2);
 
 	// Call drawGrid to update g_minY and g_maxY
 	drawGrid();

@@ -127,9 +127,36 @@ bool AdcDma::SetBuffers(int bufCount, int bufSize)
 	return true;
 }
 
+void AdcDma::updateAdcTimerChannel()
+{
+	uint32_t trgSel;
+
+	switch (m_timerChannel) {
+	case 0 :
+		trgSel = ADC_MR_TRGSEL_ADC_TRIG1;
+		break;
+	case 1:
+		trgSel = ADC_MR_TRGSEL_ADC_TRIG2;
+		break;
+	case 2:
+		trgSel = ADC_MR_TRGSEL_ADC_TRIG3;
+		break;
+	default :
+		PF(DBG_TIMER, "invalid timer channel %d !\r\n", m_timerChannel);
+		return;
+	}
+
+	uint32_t mr = ADC->ADC_MR;
+
+	mr &= ~ADC_MR_TRGSEL_Msk;
+	mr |= trgSel;
+
+	ADC->ADC_MR = mr;
+}
+
 bool AdcDma::SetTimerChannel(int timerChannel)
 {
-	if (timerChannel > ADC_DMA_MAX_TIMER_CHANNEL) {
+	if (timerChannel < 0 || timerChannel > ADC_DMA_MAX_TIMER_CHANNEL) {
 		PF(DBG_TIMER, "invalid channel %d !\r\n", timerChannel);
 		return false;
 	}
@@ -141,25 +168,8 @@ bool AdcDma::SetTimerChannel(int timerChannel)
 
 	m_timerChannel = timerChannel;
 
-	/* Timer channel selection in ADC_MR */
-	int trgSel;
-	switch (m_timerChannel) {
-	case 0 :
-		trgSel = ADC_TRIG_TIO_CH_0;
-		break;
-	case 1 :
-		trgSel = ADC_TRIG_TIO_CH_1;
-		break;
-	case 2 :
-		trgSel = ADC_TRIG_TIO_CH_2;
-		break;
-	default :
-		PF(DBG_TIMER, "invalid timer channel %d !\r\n", m_timerChannel);
-		return false;
-	}
-
-	int mr = ADC->ADC_MR & ~ADC_MR_TRGSEL_Msk;
-	ADC->ADC_MR = mr | trgSel;
+	// Update ADC trigger sel
+	updateAdcTimerChannel();
 
 	// Timer has to be setup again
 	configureTimer();
@@ -518,9 +528,6 @@ bool AdcDma::configureAdc(bool bSoftwareTrigger)
 	// We use prescaler of 0, so ADCClock = MCLK / 2 = 41MHz
 	// => We need 41 periods, smaller fitting value is 64, use it
 
-	// Read current trigger since this is set by SetTimerChannel
-	int chSelect = ADC->ADC_MR & ADC_MR_TRGSEL_Msk;
-
 	// Select trigger based on value of bSoftwareTrigger is requi
 	int trgSelect = (bSoftwareTrigger ? ADC_MR_TRGEN_DIS : ADC_MR_TRGEN_EN);
 
@@ -529,7 +536,6 @@ bool AdcDma::configureAdc(bool bSoftwareTrigger)
 
 	ADC->ADC_MR =
 			trgSelect					|	// Enable hardware trigger
-			chSelect					|	// Trigger channel selection
 			ADC_MR_LOWRES_BITS_12		|	// 12 bits resolution
 			ADC_MR_SLEEP_NORMAL			|	// Disable sleep mode
 			ADC_MR_FWUP_OFF				|	// Normal sleep mode (disabled by ADC_MR_SLEEP_NORMAL)
@@ -541,6 +547,8 @@ bool AdcDma::configureAdc(bool bSoftwareTrigger)
 			ADC_MR_TRACKTIM(0)			|	// Minimal value for tracking time
 			ADC_MR_TRANSFER(0)			|	// Minimal value for transfer period
 			ADC_MR_USEQ_NUM_ORDER;			// Don't use sequencer mode
+
+	updateAdcTimerChannel();
 
 	return true;
 }
@@ -645,7 +653,7 @@ bool AdcDma::configureTimer()
 
 	// And write data to timer controller
 
-	pmc_enable_periph_clk (TC_INTERFACE_ID + 0*3 + m_timerChannel) ;  // clock the TC0 channel for ADC
+	pmc_enable_periph_clk (TC_INTERFACE_ID + m_timerChannel) ;  // clock the TC0 channel for ADC
 
 	TcChannel * t = &(TC0->TC_CHANNEL)[m_timerChannel];  // pointer to TC0 registers for its channel 0
 	t->TC_CCR = TC_CCR_CLKDIS;              // disable internal clocking during setup
