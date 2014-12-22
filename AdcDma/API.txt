@@ -3,6 +3,7 @@ ADCDMA API
 CONTROL
 
 bool SetChannels(uint16_t *channels, uint32_t channelsCount)
+bool SetSampleRate(uint32_t sampleRate)
 bool SetBufferDuration(uint32_t ms)
 bool SetCaptureDuration(uint32_t ms)
 bool Start()

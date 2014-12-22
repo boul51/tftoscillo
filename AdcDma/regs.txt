@@ -1,0 +1,96 @@
+	***********************
+	** Written registers **
+	***********************
+
+ADC->ADC_MR
+ - ADC_MR_TRGSEL in updateAdcTimerChannel
+ - ~ADC_MR_TRGSEL in configureAdc
+
+ADC->ADC_EMR
+ - ADC_EMR_TAG in SetAdcChannels
+ - ADC_EMR_CMPSEL in disableCompareMode, triggerEnterPreArmed
+ - ADC_EMR_CMPALL in disableCompareMode, triggerEnterPreArmed
+ - ADC_EMR_CMPMODE in triggerEnterPreArmed, triggerEnterArmed
+ - ADC_EMR_CMPFILTER in triggerEnterPreArmed
+
+ADC->ADC_CHER
+ - in ReadSingleValue
+ - in startAdc
+
+ADC->ADC_CHDR
+ - in ReadSingleValue
+ - in startAdc
+ - in stopAdc
+
+ADC->ADC_CR
+ - in ReadSingleValue
+
+ADC->ADC_CWR
+ - in SetTrigger
+
+ADC->ADC_ISR
+ - in configureDma
+
+ADC->ADC_IER
+ - in configureDma
+ - ADC_IER_COMPE in triggerEnableInterrupt
+
+ADC->ADC_IDR
+ - ADC_ISR_COMPE in triggerDisableInterrupt
+ - ADC_ISR_ENDRX in HandleInterrupt
+
+ADC->ADC_RPR
+ - in startDma
+
+ADC->ADC_RCR
+ - in startDma
+
+ADC->ADC_RNPR
+ - in startDma
+ - in advanceWriteBuffer
+
+ADC->ADC_RNCR
+ - in startDma
+ - in advanceWriteBuffer
+
+ADC->ADC_PTCR
+ - in startDma
+ - in stopDma
+
+TC_CHANNEL->TC_CCR
+ - in configureTimer
+ - in startTimer
+ - in stopTimer
+
+TC_CHANNEL->TC_IDR
+ - in configureTimer
+
+TC_CHANNEL->TC_CMR
+ - in configureTimer
+
+TC_CHANNEL->TC_RC
+ - in configureTimer
+
+TC_CHANNEL->TC_RA
+ - in configureTimer
+
+	********************
+	** Read registers **
+	********************
+
+ADC->ADC_RCR
+ - in GetNextSample
+ - in HandleInterrupt
+
+ADC->ADC_ISR
+ - in ReadSingleValue
+ - in configureDma
+ - in startDma
+ - in HandleInterrupt
+
+ADC->ADC_CDR
+ - in ReadSingleValue
+
+TC_CHANNEL->TC_SR
+ - in configureTimer
+
