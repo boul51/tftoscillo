@@ -1000,23 +1000,6 @@ void getAndDrawSampleSlow()
 		drawTexts(true);
 	}
 
-	/*
-	if (channel == SCOPE_CHANNEL_1) {
-		if (isTgSample) {
-			g_iSample = 0;
-		}
-		if (!s_gotTriggerSample && isTgSample) {
-			g_triggerStatus = TRIGGER_STATUS_TRIGGERED;
-			drawTexts(false);
-		}
-		s_gotTriggerSample |= isTgSample;
-		if (s_gotTriggerSample) {
-			drawSample(sample, g_iSample);
-		}
-		break;
-	}
-	*/
-
 	// Loop until we get a sample for each scope channel
 	int obtainedChannels = 0;
 	for (;;) {
@@ -1034,8 +1017,8 @@ void getAndDrawSampleSlow()
 
 				if (s_gotTriggerSample) {
 					drawSample(sample, g_iSample, pChannelDesc);
+					obtainedChannels++;
 				}
-				obtainedChannels++;
 			}
 			// First 2/3 samples may be slightly inaccurate, avoid them for pot inputs
 			// Todo: check ADC config !
