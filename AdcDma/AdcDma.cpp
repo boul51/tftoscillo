@@ -13,8 +13,8 @@
 #define DBG_SAMPLE	false
 
 typedef struct _ADCDMA_PRESCALER {
-	int bitMask;
-	int div;
+	uint32_t bitMask;
+	uint32_t div;
 }ADCDMA_PRESCALER;
 
 ADCDMA_PRESCALER adcDmaPrescalers[] = {
@@ -55,7 +55,6 @@ AdcDma::AdcDma()
 AdcDma::~AdcDma()
 {
 	Stop();
-
 	deleteBuffers();
 }
 
@@ -274,7 +273,7 @@ bool AdcDma::GetNextSample(uint16_t *sample, int *channel, CaptureState *state, 
 	// At this point we know we have available data
 
 	// Get sample
-	uint32_t rawSample = m_buffers[m_readBufIndex][m_readSampleIndex];
+	uint16_t rawSample = m_buffers[m_readBufIndex][m_readSampleIndex];
 	*sample = rawSample & 0x0FFF;
 	if (channel)
 		*channel = (rawSample & 0xF000) >> 12;
@@ -336,12 +335,20 @@ bool AdcDma::ReadSingleValue(int adcChannel, int *value)
 	if (m_captureState != CaptureStateStopped)
 		return false;
 
+	if (adcChannel < 0 || adcChannel > ADC_DMA_MAX_ADC_CHANNEL)
+		return false;
+
+	if (value == NULL)
+		return false;
+
 	// Set configuration to software trigger
 	configureAdc(true);
 	stopTimer();
 
+	// Disable all channels
 	ADC->ADC_CHDR = 0x0000FFFF;
 
+	// Read pending values to avoid reading an old sample
 	while (ADC->ADC_ISR & (0x1 << adcChannel)) {
 		ADC->ADC_CDR[adcChannel];
 	}
@@ -371,7 +378,7 @@ bool AdcDma::SetTrigger(int value, TriggerMode mode, int triggerChannel, int tri
 	if (mode != RisingEdge && mode != FallingEdge)
 		return false;
 
-	if (triggerChannel > ADC_DMA_MAX_ADC_CHANNEL)
+	if (triggerChannel < 0 || triggerChannel > ADC_DMA_MAX_ADC_CHANNEL)
 		return false;
 
 	m_triggerMode = mode;
@@ -396,6 +403,7 @@ bool AdcDma::SetTrigger(int value, TriggerMode mode, int triggerChannel, int tri
 
 	uint16_t v = (uint16_t)value;
 
+	// Set comparison window register
 	ADC->ADC_CWR =
 			v |			// Low threshold
 			v << 16;	// High threshold
@@ -528,7 +536,7 @@ bool AdcDma::configureAdc(bool bSoftwareTrigger)
 	// We use prescaler of 0, so ADCClock = MCLK / 2 = 41MHz
 	// => We need 41 periods, smaller fitting value is 64, use it
 
-	// Select trigger based on value of bSoftwareTrigger is requi
+	// Select trigger based on value of bSoftwareTrigger
 	int trgSelect = (bSoftwareTrigger ? ADC_MR_TRGEN_DIS : ADC_MR_TRGEN_EN);
 
 	// Clear current trigger from MR
@@ -548,6 +556,7 @@ bool AdcDma::configureAdc(bool bSoftwareTrigger)
 			ADC_MR_TRANSFER(0)			|	// Minimal value for transfer period
 			ADC_MR_USEQ_NUM_ORDER;			// Don't use sequencer mode
 
+	// Update timer channel used for trigger
 	updateAdcTimerChannel();
 
 	return true;
@@ -555,20 +564,20 @@ bool AdcDma::configureAdc(bool bSoftwareTrigger)
 
 void AdcDma::startAdc()
 {
-	ADC->ADC_CHDR = 0x0000FFFF;		// Disable all ADC channels
+	ADC->ADC_CHDR = 0x0000FFFF;			// Disable all ADC channels
 
-	int cher = 0;
+	uint32_t cher = 0;
 
 	for (int i = 0; i < m_adcChannelsCount; i++) {
 		cher |= (0x1 << m_adcChannels[i]);	// Enable ADC channel
 	}
 
-	ADC->ADC_CHER = cher;	// Update Channel Enable Register
+	ADC->ADC_CHER = cher;				// Update Channel Enable Register
 }
 
 void AdcDma::stopAdc()
 {
-	ADC->ADC_CHDR = 0x0000FFFF;		// Disable all ADC channels
+	ADC->ADC_CHDR = 0x0000FFFF;			// Disable all ADC channels
 }
 
 bool AdcDma::configureDma()
@@ -576,8 +585,7 @@ bool AdcDma::configureDma()
 	m_writeBufIndex = 0;
 	m_readBufIndex = 0;
 
-	ADC->ADC_IDR =
-			0xFFFFFFFF;					// Disable all interrupts
+	ADC->ADC_IDR = 0xFFFFFFFF;			// Disable all interrupts
 
 	ADC->ADC_IER =
 			ADC_IER_GOVRE			|	// Enable interrupts on general overflow errors
@@ -605,7 +613,7 @@ void AdcDma::startDma()
 	ADC->ADC_RNCR =
 			m_bufSize;					// Setup DMA next size
 
-	ADC->ADC_PTCR = (0x1 << 0);			// Enable RX
+	ADC->ADC_PTCR = ADC_PTCR_RXTEN;		// Enable RX
 
 	NVIC_ClearPendingIRQ(ADC_IRQn);
 	NVIC_EnableIRQ(ADC_IRQn);
@@ -613,7 +621,7 @@ void AdcDma::startDma()
 
 void AdcDma::stopDma()
 {
-	ADC->ADC_PTCR &= (0x1 << 1);   // Disable RX
+	ADC->ADC_PTCR = ADC_PTCR_RXTDIS;   // Disable RX
 
 	NVIC_ClearPendingIRQ(ADC_IRQn);
 	NVIC_DisableIRQ(ADC_IRQn);
@@ -643,7 +651,7 @@ bool AdcDma::configureTimer()
 	}
 
 	// We got prescaler, now calculate value for rc
-	int RC = MCLK / (m_sampleRate * prescaler.div);
+	uint32_t RC = MCLK / (m_sampleRate * prescaler.div);
 
 	PF(DBG_TIMER, "AdcDma: Setting up timer with parameters:\r\n");
 	PF(DBG_TIMER, " - Timer channel %d\r\n", m_timerChannel);
@@ -742,7 +750,8 @@ bool AdcDma::advanceWriteBuffer()
 
 void AdcDma::disableCompareMode()
 {
-	ADC->ADC_EMR &= ~ADC_EMR_CMPSEL_Msk;
+	// Clear selected channel and 'all channels' mode
+	ADC->ADC_EMR &= ~(ADC_EMR_CMPSEL_Msk | ADC_EMR_CMPALL);
 }
 
 void AdcDma::triggerUpdateState(TriggerEvent *event)
@@ -883,7 +892,7 @@ void AdcDma::triggerEnterEnabled(TriggerEvent *event)
 
 void AdcDma::triggerEnterPreArmed(TriggerEvent *event)
 {
-	int cmpMode;
+	uint32_t cmpMode, emr;
 
 	// We first need value to go out of window to arm the trigger
 	switch (m_triggerMode) {
@@ -898,13 +907,13 @@ void AdcDma::triggerEnterPreArmed(TriggerEvent *event)
 		return;
 	}
 
-	int emr = ADC->ADC_EMR;
+	emr = ADC->ADC_EMR;
 	emr &= ~(ADC_EMR_CMPMODE_Msk |
 			 ADC_EMR_CMPSEL_Msk  |
 			 ADC_EMR_CMPALL |
 			 ADC_EMR_CMPFILTER_Msk);
 
-	emr |= (cmpMode |						// Comparator mode
+	emr |= (cmpMode |							// Comparator mode
 			ADC_EMR_CMPSEL(m_triggerChannel));	// ADC channel for comparator
 
 	ADC->ADC_EMR = emr;
@@ -914,7 +923,7 @@ void AdcDma::triggerEnterPreArmed(TriggerEvent *event)
 
 void AdcDma::triggerEnterArmed(TriggerEvent *event)
 {
-	int emr;
+	uint32_t emr;
 
 	// Change mode of interrupt
 	switch (m_triggerMode) {
@@ -971,11 +980,11 @@ void AdcDma::triggerFindTriggerSample()
 	bool bArmed = false;
 	bool bFound = false;
 
-	// Skip pre buffers for trigger sample
-	int iBuf = (m_readBufIndex + m_triggerPreBuffersCount) % m_bufCount;
-
 	uint16_t rawSample;
 	uint16_t sample;
+
+	// Skip pre buffers for trigger sample
+	int iBuf = (m_readBufIndex + m_triggerPreBuffersCount) % m_bufCount;
 
 	while (bufLoops < m_bufCount) {
 		for (int iSample = 0; iSample < m_bufSize; iSample++) {
@@ -1055,7 +1064,7 @@ void AdcDma::triggerFindTriggerSample()
 
 void AdcDma::HandleInterrupt()
 {
-	int isr = ADC->ADC_ISR;
+	uint32_t isr = ADC->ADC_ISR;
 
 	if (isr & ADC_ISR_COMPE) {
 
