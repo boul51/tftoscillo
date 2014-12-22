@@ -1,0 +1,20 @@
+ADCDMA API
+
+CONTROL
+
+bool SetChannels(uint16_t *channels, uint32_t channelsCount)
+bool SetBufferDuration(uint32_t ms)
+bool SetCaptureDuration(uint32_t ms)
+bool Start()
+bool Stop()
+
+TRIGGER
+
+bool SetTrigger(uint16_t value, uint16_t channel, uint32_t timeoutMs, TriggerMode mode)
+bool ClearTrigger()
+TriggerState getTriggerState()
+
+DATA
+uint16_t *GetNextBuffer()
+bool GetNextSample(uint16_t *sample, uint16_t *channel)
+
