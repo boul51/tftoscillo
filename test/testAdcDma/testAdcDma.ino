@@ -37,7 +37,7 @@ void setup()
 void loop()
 {
 	bool timeout;
-	int channel = IN_CHANNEL;
+	uint16_t channel = IN_CHANNEL;
 	int bufSize = 5;
 	int bufCount = 4;
 
@@ -81,12 +81,17 @@ void loop()
 				isTriggerSample = false;
 			}
 			uint16_t sample = buf[i];
-			PF(DBG_LOOP, "%c Got sample %d\r\n", (isTriggerSample ? '*' :' '), sample);
+			PF(true, "%c Got sample %d\r\n", (isTriggerSample ? '*' :' '), sample);
 		}
 		bufIdx++;
 	}
 
-	PF(DBG_LOOP, "Trigger sample: buf %d, sample %d\r\n", tgBufIdx, tgSampleIdx);
+	if (!timeout) {
+		PF(true, "Trigger sample: buf %d, sample %d\r\n", tgBufIdx, tgSampleIdx);
+	}
+	else {
+		PF(true, "Trigger timeout\r\n");
+	}
 }
 
 /* Start, trigger, wait for trigger done and read samples */
@@ -141,12 +146,9 @@ void loop()
 	g_adcDma->SetSampleRate(10);
 
 	g_adcDma->Start();
-	g_adcDma->SetTrigger(2000, AdcDma::RisingEdge, channel, 1000);
 
 	// Acquisition will stop when all buffers are full
-	while (g_adcDma->GetCaptureState() != AdcDma::CaptureStateStopped) {
-		delay(1);
-	}
+	while (g_adcDma->GetCaptureState() != AdcDma::CaptureStateStopped) {}
 
 	uint16_t sample;
 	int iSample = 0;
@@ -165,7 +167,7 @@ void loop()
 
 void loop()
 {
-	int channel = IN_CHANNEL;
+	uint16_t channel = IN_CHANNEL;
 	g_adcDma->SetAdcChannels(&channel, 1);
 	g_adcDma->SetTimerChannel(0);
 	g_adcDma->SetBuffers(4, 10);
@@ -178,7 +180,7 @@ void loop()
 	AdcDma::CaptureState state;
 
 	for (;;) {
-		if (g_adcDma->GetNextSample(&sample, &state)) {
+		if (g_adcDma->GetNextSample(&sample, &channel, &state)) {
 			PF(DBG_LOOP, "Got sample %d\r\n", sample);
 		}
 		if (state == AdcDma::CaptureStateStopped)
