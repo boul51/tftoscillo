@@ -2,7 +2,11 @@
 #include "AdcDma.h"
 #include <LibDbg.h>
 
+#define DEBUG_ALL 0
+
 // Debug zones
+#if DEBUG_ALL != 1
+
 #define DBG_INIT	false
 #define DBG_IRQ		false
 #define DBG_TIMER	false
@@ -11,6 +15,18 @@
 #define DBG_WRITE	false
 #define DBG_CHANNEL false
 #define DBG_SAMPLE	false
+
+#else
+#define DBG_INIT	true
+#define DBG_IRQ		true
+#define DBG_TIMER	true
+#define DBG_TRIGGER	true
+#define DBG_READ	true
+#define DBG_WRITE	true
+#define DBG_CHANNEL true
+#define DBG_SAMPLE	true
+
+#endif
 
 typedef struct _ADCDMA_PRESCALER {
 	uint32_t bitMask;
@@ -48,7 +64,7 @@ AdcDma::AdcDma()
 	allocateBuffers(ADC_DMA_DEF_BUF_COUNT, ADC_DMA_DEF_BUF_SIZE, true);
 
 	SetTimerChannel(m_timerChannel);	// Will call ConfigureTimer
-	configureAdc(true);
+	configureAdc(false);
 	configureDma();
 }
 
@@ -96,11 +112,19 @@ void AdcDma::Start()
 
 void AdcDma::Stop()
 {
+	PF(DBG_INIT, "++\r\n");
+
+	PF(DBG_INIT, "Will stop timer\r\n");
 	stopTimer();
+	PF(DBG_INIT, "Will stop DMA\r\n");
 	stopDma();
+	PF(DBG_INIT, "Will stop ADC\r\n");
 	stopAdc();
 
+	PF(DBG_INIT, "Will set timer state stopped\r\n");
 	setCaptureState(CaptureStateStopped);
+
+	PF(DBG_INIT, "--\r\n");
 }
 
 bool AdcDma::SetBuffers(int bufCount, int bufSize)
@@ -176,7 +200,7 @@ bool AdcDma::SetTimerChannel(int timerChannel)
 	return true;
 }
 
-bool AdcDma::SetAdcChannels(int *adcChannels, int adcChannelsCount)
+bool AdcDma::SetAdcChannels(uint16_t *adcChannels, int adcChannelsCount)
 {
 	if (adcChannelsCount > ADC_DMA_MAX_ADC_CHANNEL) {
 		return false;
@@ -235,7 +259,7 @@ uint16_t *AdcDma::GetReadBuffer()
 	return buf;
 }
 
-bool AdcDma::GetNextSample(uint16_t *sample, int *channel, CaptureState *state, bool *isTriggerSample)
+bool AdcDma::GetNextSample(uint16_t *sample, uint16_t *channel, CaptureState *state, bool *isTriggerSample)
 {
 	// Deal with trigger locally in slow mode
 
@@ -536,14 +560,11 @@ bool AdcDma::configureAdc(bool bSoftwareTrigger)
 	// We use prescaler of 0, so ADCClock = MCLK / 2 = 41MHz
 	// => We need 41 periods, smaller fitting value is 64, use it
 
-	// Select trigger based on value of bSoftwareTrigger
-	int trgSelect = (bSoftwareTrigger ? ADC_MR_TRGEN_DIS : ADC_MR_TRGEN_EN);
-
-	// Clear current trigger from MR
-	ADC->ADC_MR &= ~ADC_MR_TRGEN;
+	// Enable / disable hardware trigger
+	uint32_t trgEn = (bSoftwareTrigger ? ADC_MR_TRGEN_DIS : ADC_MR_TRGEN_EN);
 
 	ADC->ADC_MR =
-			trgSelect					|	// Enable hardware trigger
+			trgEn						|	// Enable/disable hardware trigger
 			ADC_MR_LOWRES_BITS_12		|	// 12 bits resolution
 			ADC_MR_SLEEP_NORMAL			|	// Disable sleep mode
 			ADC_MR_FWUP_OFF				|	// Normal sleep mode (disabled by ADC_MR_SLEEP_NORMAL)
@@ -569,6 +590,7 @@ void AdcDma::startAdc()
 	uint32_t cher = 0;
 
 	for (int i = 0; i < m_adcChannelsCount; i++) {
+		PF(true, "enabling channel %d\r\n", m_adcChannels[i]);
 		cher |= (0x1 << m_adcChannels[i]);	// Enable ADC channel
 	}
 
@@ -842,7 +864,7 @@ void AdcDma::triggerUpdateState(TriggerEvent *event)
 
 _unhandledEvent :
 
-	PF(DBG_TRIGGER, "Unhandled event from state %s\r\n", StrTriggerState[m_triggerState]);
+	PF(DBG_TRIGGER, "Unhandled event (kind %d) from state %s\r\n", event->eventKind, StrTriggerState[m_triggerState]);
 	return;
 }
 

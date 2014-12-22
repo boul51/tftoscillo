@@ -76,11 +76,12 @@ public :
 	void Stop();
 	bool SetBuffers(int bufCount, int bufSize);
 	bool SetTimerChannel(int timerChannel);
-	bool SetAdcChannels(int *adcChannel, int adcChannelsCount);
+	bool SetAdcChannels(uint16_t *adcChannel, int adcChannelsCount);
 	bool SetSampleRate(int sampleRate);
+	CaptureState GetCaptureState() {return m_captureState;}
 
 	uint16_t *GetReadBuffer();
-	bool GetNextSample(uint16_t *sample, int *channel, CaptureState *state = NULL, bool *isTriggerSample = NULL);
+	bool GetNextSample(uint16_t *sample, uint16_t *channel, CaptureState *state = NULL, bool *isTriggerSample = NULL);
 	bool ReadSingleValue(int adcChannel, int *value);
 
 	bool SetTrigger(int value, TriggerMode mode, int triggerChannel, int triggerTimeoutMs);
