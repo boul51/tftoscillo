@@ -78,7 +78,7 @@ public :
 	bool SetTimerChannel(int timerChannel);
 	bool SetAdcChannels(uint16_t *adcChannel, int adcChannelsCount);
 	bool SetSampleRate(int sampleRate);
-	CaptureState GetCaptureState() {return m_captureState;}
+	CaptureState GetCaptureState();
 
 	uint16_t *GetReadBuffer();
 	bool GetNextSample(uint16_t *sample, uint16_t *channel, CaptureState *state = NULL, bool *isTriggerSample = NULL);

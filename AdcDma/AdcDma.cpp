@@ -247,6 +247,11 @@ bool AdcDma::SetSampleRate(int sampleRate)
 	return configureTimer();
 }
 
+AdcDma::CaptureState AdcDma::GetCaptureState()
+{
+	return m_captureState;
+}
+
 uint16_t *AdcDma::GetReadBuffer()
 {
 	uint16_t *buf = NULL;
