@@ -14,8 +14,10 @@ public :
 
 #if LIBDBG_ENABLE == 1
 #define PF(doPrint, ...) LibDbg::pf(doPrint, __FUNCTION__, __VA_ARGS__)
+#define P(doPrint, ...) LibDbg::pf(doPrint, NULL, __VA_ARGS__)
 #else
 #define PF(doPrint, ...) {}
+#define P(doPrint, ...) {}
 #endif
 
 #endif

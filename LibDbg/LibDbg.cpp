@@ -10,9 +10,6 @@ void LibDbg::pf(bool doPrint, const char *caller, const char *fmt, ... )
 	char buf[128]; // resulting string limited to 128 chars
 	va_list args;
 
-	//doPrint = true;
-
-	//Serial.println("in LibDbg::p");
 	if (!doPrint)
 		return;
 
@@ -20,8 +17,11 @@ void LibDbg::pf(bool doPrint, const char *caller, const char *fmt, ... )
 	vsnprintf(buf, 128, fmt, args);
 	va_end (args);
 
-	Serial.print(caller);
-	Serial.print(": ");
+	if (caller) {
+		Serial.print(caller);
+		Serial.print(": ");
+	}
+
 	Serial.print(buf);
 }
 

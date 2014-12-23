@@ -21,12 +21,16 @@
 #define ADC_DMA_DEF_BUF_COUNT	5
 #define ADC_DMA_MAX_BUF_COUNT   100
 
+#define	ADC_DMA_MAX_MEM			10000
+
 class AdcDma
 {
 
 /* Public types */
 
 public :
+
+	typedef bool (*RxCallback)(uint16_t *buffer, int bufLen, bool bIsTrigger, int triggerIndex, bool bTimeout);
 
 	enum TriggerMode {
 		RisingEdge,
@@ -77,25 +81,29 @@ public :
 	bool SetBuffers(int bufCount, int bufSize);
 	bool SetTimerChannel(int timerChannel);
 	bool SetAdcChannels(uint16_t *adcChannel, int adcChannelsCount);
+	int  GetAdcChannelsCount();
 	bool SetSampleRate(int sampleRate);
 	CaptureState GetCaptureState();
 
-	uint16_t *GetReadBuffer();
-	bool GetNextSample(uint16_t *sample, uint16_t *channel, CaptureState *state = NULL, bool *isTriggerSample = NULL);
-	bool ReadSingleValue(int adcChannel, int *value);
+	bool ReadSingleValue(int adcChannel, uint16_t *value);
 
 	bool SetTrigger(int value, TriggerMode mode, int triggerChannel, int triggerTimeoutMs);
 	bool SetTriggerPreBuffersCount(int triggerPreBuffersCount);
 	bool SetTriggerPreSamplesCount(int triggerPreSamplesCount);
 	bool TriggerEnable(bool bEnable);
-	bool DidTriggerComplete(bool *pbTimeout = NULL);
-	bool GetTriggerSampleAddress(uint16_t **pBufAddress, int *pSampleIndex);
 
 	void HandleInterrupt();
 
+	inline uint16_t channel(uint16_t rawSample) {if (m_adcChannelsCount == 1) return m_adcChannels[0]; else return (rawSample & 0xF000) >> 12;}
+	inline uint16_t sample(uint16_t rawSample) {return (rawSample & 0x0FFF);}
+
 /* Private methods and members */
 
+	uint32_t SetBufferDuration(uint32_t durationMs);
+	void SetRxHandler(RxCallback rxHandler);
 private :
+
+	RxCallback m_rxHandler;
 
 	AdcDma();
 	~AdcDma();

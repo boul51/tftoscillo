@@ -18,6 +18,8 @@ void setup()
 	PF(DBG_SETUP, "++\r\n");
 
 	g_adcDma = AdcDma::GetInstance();
+
+	setupAdcDma();
 }
 
 /* Test mode selection */
@@ -26,8 +28,10 @@ void setup()
 #define TEST_MODE_TRIGGER_BUFFER	1
 #define TEST_MODE_POSTREAD			2
 #define TEST_MODE_PREREAD			3
+#define TEST_MODE_BUFFER_DURATION	4
+#define TEST_MODE_RX_HANDLER		5
 
-#define TEST_MODE			TEST_MODE_TRIGGER_BUFFER
+#define TEST_MODE			TEST_MODE_RX_HANDLER
 
 
 /* Start, trigger, wait for trigger done and read buffers */
@@ -186,6 +190,103 @@ void loop()
 		if (state == AdcDma::CaptureStateStopped)
 			break;
 	}
+}
+
+#elif TEST_MODE == TEST_MODE_BUFFER_DURATION
+
+void loop()
+{
+	int bufCount = 0;
+	uint32_t actDuration;
+	uint16_t channel = IN_CHANNEL;
+	g_adcDma->SetAdcChannels(&channel, 1);
+	g_adcDma->SetSampleRate(48000);
+	actDuration = g_adcDma->SetBufferDuration(1000);
+
+	PF(true, "Got actual duration %d ms\r\n", actDuration);
+
+	g_adcDma->Start();
+	//while (g_adcDma->GetCaptureState() != AdcDma::CaptureStateStopped) {}
+
+	for (;;) {
+		if (g_adcDma->GetReadBuffer()) {
+			bufCount++;
+			PF(true, "Got %d buffers\r\n", bufCount);
+			if (bufCount >= 10) {
+				break;
+			}
+		}
+	}
+
+	g_adcDma->Stop();
+
+}
+
+#elif TEST_MODE == TEST_MODE_RX_HANDLER
+
+bool g_done = true;
+bool g_triggered = false;
+int g_reqSamples = 10000000;
+int g_readSamples = 0;
+int g_readBuffers = 0;
+
+bool RxHandler(uint16_t *buffer, int bufLen, bool bIsTrigger, int triggerIndex, bool bTimeout)
+{
+	PF(false, "%d\r\n", g_readSamples);
+
+	char c;
+
+	g_readSamples += bufLen;
+	g_readBuffers++;
+
+	PF(false, "bIsTrigger %d, triggerIndex %d\r\n", bIsTrigger, triggerIndex);
+
+	for (int iSample = 0; iSample < bufLen; iSample++) {
+		if (bTimeout)
+			c = 'T';
+		else if (bIsTrigger && (iSample == triggerIndex) )
+			c = '*';
+		else
+			c = ' ';
+
+		P(true, "%c Channel %d, Sample %d\r\n", c, (buffer[iSample] & 0xF000) >> 12, buffer[iSample] & 0x0FFF);
+	}
+
+	if (g_readSamples >= g_reqSamples || bIsTrigger || bTimeout) {
+		PF(true, "Got %d samples (%d buffers), stopping AdcDma\r\n", g_readSamples, g_readBuffers);
+		g_adcDma->Stop();
+		g_readSamples = 0;
+		g_triggered = false;
+		g_done = true;
+	}
+	else if (g_adcDma->GetCaptureState() == AdcDma::CaptureStateStopped) {
+		PF(true, "AdcDma is stopped, got %d buffers\r\n", g_readBuffers);
+	}
+
+	return true;
+}
+
+void setupAdcDma()
+{
+	uint16_t channel = IN_CHANNEL;
+
+	g_adcDma->SetAdcChannels(&channel, 1);
+	g_adcDma->SetSampleRate(5);
+	g_adcDma->SetBuffers(10, 1);
+	g_adcDma->SetRxHandler(RxHandler);
+	g_adcDma->SetTrigger(2000, AdcDma::RisingEdge, channel, 5000);
+	g_adcDma->TriggerEnable(true);
+}
+
+void loop()
+{
+	if (!g_done)
+		return;
+
+	g_done = false;
+
+	PF(true, "Starting AdcDma\r\n");
+	g_adcDma->Start();
 }
 
 #endif

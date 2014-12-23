@@ -18,4 +18,49 @@ typedef struct _CHANNEL_DESC {
 	uint8_t b;
 }CHANNEL_DESC;
 
+typedef struct _DRAW_STATE {
+	bool bFinished;
+	bool bNeedsErase;
+	int  drawnFrames;
+	int  mappedFrames;
+	int  rxFrames;
+	int  drawMode;
+}DRAW_STATE;
+
+typedef struct _SCOPE_STATE {
+	uint triggerVal;
+	uint minSampleRate;
+	uint maxSampleRate;
+	uint sampleRate;
+	uint triggerStatus;
+	bool bTriggerStatusChanged;
+}SCOPE_STATE;
+
+typedef struct _SIG_STATE {
+	uint freq;
+	GenSigDma::WaveForm waveform;
+}SIG_STATE;
+
+typedef struct _POT_VAR_DISPLAY {
+	bool bValid;
+	bool bNeedsErase;
+	int  prevValue;
+	const char *prefix;
+	const char *suffix;
+	int x;
+	int y;
+}POT_VAR_DISPLAY;
+
+typedef struct _POT_VAR {
+	uint adcChannel;
+	uint potValue;
+	uint minValue;
+	uint maxValue;
+	uint *value;
+	uint margin;
+	bool changed;
+	char name[5];
+	POT_VAR_DISPLAY display;
+}POT_VAR;
+
 #endif
