@@ -28,15 +28,19 @@ typedef struct _DRAW_STATE {
 }DRAW_STATE;
 
 typedef struct _SCOPE_STATE {
-	uint triggerVal;
+	uint sampleRate;
 	uint minSampleRate;
 	uint maxSampleRate;
-	uint sampleRate;
+	uint triggerVal;
+	uint minTriggerVal;
+	uint maxTriggerVal;
 	uint triggerStatus;
 	bool bTriggerStatusChanged;
 }SCOPE_STATE;
 
 typedef struct _SIG_STATE {
+	uint minFreq;
+	uint maxFreq;
 	uint freq;
 	GenSigDma::WaveForm waveform;
 }SIG_STATE;
@@ -54,11 +58,12 @@ typedef struct _POT_VAR_DISPLAY {
 typedef struct _POT_VAR {
 	uint adcChannel;
 	uint potValue;
-	uint minValue;
-	uint maxValue;
+	uint *minValue;
+	uint *maxValue;
 	uint *value;
 	uint margin;
 	bool changed;
+	bool forceRead;
 	char name[5];
 	POT_VAR_DISPLAY display;
 }POT_VAR;

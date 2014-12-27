@@ -72,12 +72,6 @@
 
 #define DAC_MIN_FREQ    1
 #define DAC_MAX_FREQ    1000
-//#define DAC_MAX_FREQ    10000
-uint g_dacMinFreq = DAC_MIN_FREQ;
-uint g_dacMaxFreq = DAC_MAX_FREQ;
-//uint g_dacFreq = g_dacMinFreq;
-uint g_dacFreqMult = 1;
-GenSigDma::WaveForm g_dacWaveForm = GenSigDma::WaveFormSinus;
 
 #define TRIGGER_MIN_VAL    0
 #define TRIGGER_MAX_VAL    ANALOG_MAX_VAL
@@ -160,13 +154,23 @@ uint8_t g_scopeColors[][3] = {
 
 SCOPE_STATE g_scopeState =
 {
-	(uint)-1,					// Trigger val
-	ADC_MIN_SAMPLE_RATE,	// Min sample rate
-	ADC_MAX_SAMPLE_RATE,	// Max sample rate
-	(uint)-1,					// Sample rate
+	.sampleRate		= 100,
+	.minSampleRate	= ADC_MIN_SAMPLE_RATE,
+	.maxSampleRate	= ADC_MAX_SAMPLE_RATE,
+	.triggerVal		= 2000,
+	.minTriggerVal	= 0,
+	.maxTriggerVal	= ANALOG_MAX_VAL,
+	.triggerStatus	= TRIGGER_STATUS_DISABLED,
+	.bTriggerStatusChanged = false,
 };
 
-SIG_STATE g_sigState;
+SIG_STATE g_sigState =
+{
+	.minFreq		= 1,
+	.maxFreq		= 10,
+	.freq			= 10,
+	.waveform		= GenSigDma::WaveFormSinus,
+};
 
 DRAW_STATE g_drawState;
 
@@ -178,60 +182,57 @@ bool rxHandler(uint16_t *buffer, int bufLen, bool bIsTrigger, int triggerIndex, 
 POT_VAR g_potVars[] =
 {
 	{
-		TRIGGER_CHANNEL,
-		(uint)-1,
-		0,
-		ANALOG_MAX_VAL,
-		&g_scopeState.triggerVal,
-		20,
-		false,
-		"TRIG",
-		{
-			false,
-			false,
-			0,
-			"",
-			"",
-			0,
-			0,
+		.adcChannel	= TRIGGER_CHANNEL,
+		.potValue	= 0,
+		.minValue	= &g_scopeState.minTriggerVal,
+		.maxValue	= &g_scopeState.maxTriggerVal,
+		.value		= &g_scopeState.triggerVal,
+		.margin		= 20,
+		.changed	= false,
+		.forceRead	= true,
+		.name		= "TRIG",
+		.display	= {
+			.bValid = false
 		}
 	},
 	{
-		ADC_DMA_RATE_CHANNEL,
-		(uint)-1,
-		g_scopeState.minSampleRate,
-		g_scopeState.maxSampleRate,
-		&g_scopeState.sampleRate,
-		20,
-		false,
-		"RATE",
-		{
-			true,
-			false,
-			0,
-			"SR:",
-			"Hz",
-			TFT_WIDTH / 2,
-			TEXT_Y_OFFSET,
+		.adcChannel	= ADC_DMA_RATE_CHANNEL,
+		.potValue	= 0,
+		.minValue	= &g_scopeState.minSampleRate,
+		.maxValue	= &g_scopeState.maxSampleRate,
+		.value		= &g_scopeState.sampleRate,
+		.margin		= 20,
+		.changed	= false,
+		.forceRead	= true,
+		.name		= "RATE",
+		.display	= {
+			.bValid			= true,
+			.bNeedsErase	= false,
+			.prevValue		= 0,
+			.prefix			= "SR:",
+			.suffix			= "Hz",
+			.x				= TFT_WIDTH / 2,
+			.y				= TEXT_Y_OFFSET,
 		}
 	},
 	{
-		FREQ_CHANNEL,
-		(uint)-1,
-		g_dacMinFreq,
-		g_dacMaxFreq,
-		&g_sigState.freq,
-		20,
-		false,
-		"FREQ",
-		{
-			true,
-			false,
-			0,
-			"Fq:",
-			"Hz",
-			10,
-			TEXT_Y_OFFSET,
+		.adcChannel	= FREQ_CHANNEL,
+		.potValue	= (uint)-1,
+		.minValue	= &g_sigState.minFreq,
+		.maxValue	= &g_sigState.maxFreq,
+		.value		= &g_sigState.freq,
+		.margin		= 20,
+		.changed	= false,
+		.forceRead	= true,
+		.name		= "FREQ",
+		.display	= {
+			.bValid			= true,
+			.bNeedsErase	= false,
+			.prevValue		= 0,
+			.prefix			= "Fq:",
+			.suffix			= "Hz",
+			.x				= 10,
+			.y				= TEXT_Y_OFFSET,
 		}
 	}
 };
@@ -261,7 +262,7 @@ void setup() {
 	}
 
 	SCmd.addCommand("tgmode", triggerModeHandler);
-	SCmd.addCommand("fr", freqMultHandler);
+	SCmd.addCommand("fr", freqRangeHandler);
 	SCmd.addCommand("sr", sampleRateRangeHandler);
 	SCmd.addCommand("zoom", zoomHandler);
 	SCmd.addCommand("form", formHandler);
@@ -288,7 +289,7 @@ void setup() {
 
 	updatePotsVars(NULL);
 
-	g_genSigDma->SetWaveForm(g_dacWaveForm, (float)g_sigState.freq, NULL);
+	g_genSigDma->SetWaveForm(g_sigState.waveform, (float)g_sigState.freq, NULL);
 	g_adcDma->SetSampleRate(g_scopeState.sampleRate);
 	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, SCOPE_CHANNEL_1, 1000);
 
@@ -317,21 +318,43 @@ void zoomHandler()
 	g_zoom = atoi(strZoom);
 }
 
-void freqMultHandler()
+void freqRangeHandler()
 {
-	// Expecting 1 parameter
-	char * strFreqMult;
+	// Expecting 2 parameters
+	char * strRangeStart;
+	char * strRangeEnd;
 
-	strFreqMult = SCmd.next();
-	if (strFreqMult == NULL) {
-		Serial.print(g_dacFreqMult);
-		Serial.println("");
+	int rangeStart;
+	int rangeEnd;
+
+	strRangeStart = SCmd.next();
+	if (strRangeStart == NULL) {
+		Serial.print(g_sigState.freq);
+		Serial.print(" (");
+		Serial.print(g_sigState.minFreq);
+		Serial.print(" - ");
+		Serial.print(g_sigState.maxFreq);
+		Serial.println(")");
 		return;
 	}
 
-	g_dacFreqMult = atoi(strFreqMult) / 10;
+	strRangeEnd = SCmd.next();
+	if (strRangeEnd == NULL) {
+		strRangeEnd = strRangeStart;
+	}
 
-	PF(true, "TODO\r\n");
+	rangeStart = atol(strRangeStart);
+	rangeEnd   = atol(strRangeEnd);
+
+	if (rangeEnd < rangeStart) {
+		return;
+	}
+
+	g_sigState.minFreq = rangeStart;
+	g_sigState.maxFreq = rangeEnd;
+
+	POT_VAR *potVar = getPotVar("FREQ");
+	potVar->forceRead = true;
 
 	return;
 }
@@ -371,7 +394,8 @@ void sampleRateRangeHandler()
 	g_scopeState.minSampleRate = rangeStart;
 	g_scopeState.maxSampleRate = rangeEnd;
 
-	PF(true, "TODO\r\n");
+	POT_VAR *potVar = getPotVar("RATE");
+	potVar->forceRead = true;
 
 	return;
 }
@@ -415,7 +439,7 @@ void formHandler()
 	char * strForm = SCmd.next();
 
 	if (strForm == NULL) {
-		switch (g_dacWaveForm) {
+		switch (g_sigState.waveform) {
 		case GenSigDma::WaveFormSaw :
 			Serial.println("saw");
 			break;
@@ -434,16 +458,16 @@ void formHandler()
 	}
 
 	if (strcmp(strForm, "saw") == 0) {
-		g_dacWaveForm = GenSigDma::WaveFormSaw;
+		g_sigState.waveform = GenSigDma::WaveFormSaw;
 	}
 	else if (strcmp(strForm, "sinus") == 0) {
-		g_dacWaveForm = GenSigDma::WaveFormSinus;
+		g_sigState.waveform = GenSigDma::WaveFormSinus;
 	}
 	else if (strcmp(strForm, "square") == 0) {
-		g_dacWaveForm = GenSigDma::WaveFormSquare;
+		g_sigState.waveform = GenSigDma::WaveFormSquare;
 	}
 	else if (strcmp(strForm, "triangle") == 0) {
-		g_dacWaveForm = GenSigDma::WaveFormTriangle;
+		g_sigState.waveform = GenSigDma::WaveFormTriangle;
 	}
 	else {
 		return;
@@ -1014,17 +1038,18 @@ void updatePotsVars(uint16_t *buffer)
 
 		if (potVar && !potVar->changed) {
 			diff = ABS_DIFF(potVar->potValue, potValue);
-			if (diff > potVar->margin) {
-				value = map(potValue / 4, 0, POT_ANALOG_MAX_VAL / 4, potVar->minValue, potVar->maxValue);
+			if (diff > potVar->margin || potVar->forceRead) {
+				value = map(potValue / 4, 0, POT_ANALOG_MAX_VAL / 4, *potVar->minValue, *potVar->maxValue);
 				// Pot val might be out of bounds. In this case, crop value
-				if (value < potVar->minValue)
-					value = potVar->minValue;
-				if (value > potVar->maxValue)
-					value = potVar->maxValue;
+				if (value < *potVar->minValue)
+					value = *potVar->minValue;
+				if (value > *potVar->maxValue)
+					value = *potVar->maxValue;
 				potVar->potValue = potValue;
 				potVar->display.prevValue = *potVar->value;
 				*potVar->value = value;
 				potVar->changed = true;
+				potVar->forceRead = false;
 				PF(DBG_POTS, "New value for potVar %s: %d (%d > %d)\r\n", potVar->name, *potVar->value, diff, potVar->margin);
 			}
 		}
@@ -1099,7 +1124,7 @@ void processPotVars()
 	potVar = getPotVar("FREQ");
 	if (potVar->changed) {
 		g_genSigDma->Stop();
-		g_genSigDma->SetWaveForm(g_dacWaveForm, (float)*potVar->value, NULL);
+		g_genSigDma->SetWaveForm(g_sigState.waveform, g_sigState.freq, NULL);
 		g_genSigDma->Start();
 		drawPotVar(potVar);
 		potVar->changed = false;
@@ -1161,6 +1186,8 @@ void loop()
 
 		// Update trigger status
 		drawTriggerStatus();
+
+		SCmd.readSerial();
 	}
 
 	if (g_drawState.bFinished) {
