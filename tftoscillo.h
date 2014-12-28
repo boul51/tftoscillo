@@ -68,14 +68,15 @@ typedef struct _SIG_STATE {
 	GenSigDma::WaveForm waveform;
 }SIG_STATE;
 
-typedef struct _POT_VAR_DISPLAY {
-	bool bValid;
+typedef struct _VAR_DISPLAY {
 	bool bNeedsErase;
 	const char *prefix;
 	const char *suffix;
+	uint value;
+	uint prevValue;
 	int x;
 	int y;
-}POT_VAR_DISPLAY;
+}VAR_DISPLAY;
 
 typedef struct _POT_VAR {
 	uint adcChannel;
@@ -88,7 +89,8 @@ typedef struct _POT_VAR {
 	bool changed;
 	bool forceRead;
 	char name[5];
-	POT_VAR_DISPLAY display;
+	bool bHasVarDisplay;
+	VAR_DISPLAY display;
 }POT_VAR;
 
 #endif

@@ -90,8 +90,8 @@ SerialCommand SCmd;
 // Definitions for text placement and size
 #define TEXT_FONT_HEIGHT		8
 #define TEXT_FONT_WIDTH			5
-#define TEXT_Y_OFFSET			2
-#define TEXT_DOWN_Y_OFFSET		TFT_HEIGHT - TEXT_Y_OFFSET - TEXT_FONT_HEIGHT
+#define TEXT_UP_Y_OFFSET		2
+#define TEXT_DOWN_Y_OFFSET		TFT_HEIGHT - TEXT_UP_Y_OFFSET - TEXT_FONT_HEIGHT
 
 // Grid definitions
 #define VGRID_START		(TFT_WIDTH / 2)		// x-axis position of the first vertical line
@@ -172,8 +172,8 @@ POT_VAR g_potVars[] =
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "TRIG",
+		.bHasVarDisplay = false,
 		.display	= {
-			.bValid = false
 		}
 	},
 	{
@@ -187,13 +187,15 @@ POT_VAR g_potVars[] =
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "RATE",
+		.bHasVarDisplay = true,
 		.display	= {
-			.bValid			= true,
 			.bNeedsErase	= false,
 			.prefix			= "SR:",
 			.suffix			= "Hz",
+			.value			= 0,
+			.prevValue		= 0,
 			.x				= TFT_WIDTH / 2,
-			.y				= TEXT_Y_OFFSET,
+			.y				= TEXT_UP_Y_OFFSET,
 		}
 	},
 	{
@@ -207,15 +209,28 @@ POT_VAR g_potVars[] =
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "FREQ",
+		.bHasVarDisplay = true,
 		.display	= {
-			.bValid			= true,
 			.bNeedsErase	= false,
 			.prefix			= "Fq:",
 			.suffix			= "Hz",
+			.value			= 0,
+			.prevValue		= 0,
 			.x				= 10,
-			.y				= TEXT_Y_OFFSET,
+			.y				= TEXT_UP_Y_OFFSET,
 		}
 	}
+};
+
+VAR_DISPLAY g_fpsVarDisplay =
+{
+	.bNeedsErase	= false,
+	.prefix			= "Fps:",
+	.suffix			= "",
+	.value			= 0,
+	.prevValue		= 0,
+	.x				= 10,
+	.y				= TEXT_DOWN_Y_OFFSET,
 };
 
 void setup() {
@@ -563,33 +578,40 @@ void drawTriggerArrow(POT_VAR *potVar)
 
 void drawPotVar(POT_VAR *potVar)
 {
+	potVar->display.value = *potVar->value;
+	potVar->display.prevValue = potVar->prevValue;
+
+	drawVar(&potVar->display);
+}
+
+void drawVar(VAR_DISPLAY *var)
+{
 	char textBuf[40];
 
 	for (int i = 0; i < 2; i++) {
 
 		// Don't erase if not needed
-		if (i == 0 && !potVar->display.bNeedsErase)
+		if (i == 0 && !var->bNeedsErase)
 			continue;
 
 		String s;
-		s = String(potVar->display.prefix);
+		s = String(var->prefix);
 		if (i == 0) {
 			// erase prev value
-			s += String(potVar->prevValue);
+			s += String(var->prevValue);
 			TFTscreen.stroke(BG_COLOR);
 		}
 		else {
 			// draw new value
-			s += String(*potVar->value);
+			s += String(var->value);
 			TFTscreen.stroke(TEXT_COLOR);
 		}
-		s += String(potVar->display.suffix);
+		s += String(var->suffix);
 		s.toCharArray(textBuf, 15);
-		TFTscreen.text(textBuf, potVar->display.x, potVar->display.y);
+		TFTscreen.text(textBuf, var->x, var->y);
 	}
 
-	//potVar->prevValue = *potVar->value;
-	potVar->display.bNeedsErase = true;
+	var->bNeedsErase = true;
 }
 
 void drawTriggerStatus()
@@ -779,18 +801,28 @@ void drawEraseSamples(bool bDraw, bool bErase)
 	return;
 }
 
-void computeFrameRate()
+bool computeFrameRate()
 {
+	bool bRet = false;
 	uint sec = millis() / 1000;
 	static uint s_prevSec = 0;
 	static uint s_loops = 0;
 
 	if (sec != s_prevSec) {
 		s_prevSec = sec;
-		g_frameRate = s_loops;
+		g_fpsVarDisplay.prevValue = g_fpsVarDisplay.value;
+		g_fpsVarDisplay.value = s_loops;
+		if (g_fpsVarDisplay.prevValue != g_fpsVarDisplay.value) {
+			g_fpsVarDisplay.bNeedsErase = true;
+			bRet = true;
+		}
 		s_loops = 0;
 	}
-	s_loops++;
+	else {
+		s_loops++;
+	}
+
+	return bRet;
 }
 
 void initDrawState()
@@ -1126,6 +1158,7 @@ void loop()
 	}
 
 	if (g_drawState.bFinished) {
+
 		g_drawState.bFinished = false;
 
 		// Reset drawn samples, sampled frames and trigger state
@@ -1145,6 +1178,9 @@ void loop()
 		drawTriggerStatus();
 		drawTriggerArrow(getPotVar("TRIG"));
 		drawGrid();
+
+		computeFrameRate();
+		drawVar(&g_fpsVarDisplay);
 
 		setupAdcDma();
 
