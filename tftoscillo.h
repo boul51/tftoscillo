@@ -1,6 +1,19 @@
 #ifndef _TFTOSCILLO_H_
 #define _TFTOSCILLO_H_
 
+// Macros
+#define DIMOF(x) (sizeof(x) / sizeof(x[0]))
+#define ABS_DIFF(a, b) (a > b ? a - b : b - a)
+
+// Debug zones
+#define DBG_LOOP		false
+#define DBG_VERBOSE		false
+#define DBG_TEXT		false
+#define DBG_POTS		false
+#define DBG_DRAW		false
+#define DBG_DRAWMODE	false
+#define DBG_RX			false
+
 // Resolution for analog input and outputs
 #define ANALOG_RES    12
 #define ANALOG_MAX_VAL ((1 << ANALOG_RES) - 1)
@@ -18,19 +31,25 @@ typedef struct _CHANNEL_DESC {
 	uint8_t b;
 }CHANNEL_DESC;
 
+typedef enum _DRAW_MODE {
+	DRAW_MODE_SLOW = 0,
+	DRAW_MODE_FAST = 1
+}DRAW_MODE;
+
 typedef struct _DRAW_STATE {
 	bool bFinished;
 	bool bNeedsErase;
 	int  drawnFrames;
 	int  mappedFrames;
 	int  rxFrames;
-	int  drawMode;
+	DRAW_MODE drawMode;
 }DRAW_STATE;
 
 typedef struct _SCOPE_STATE {
 	uint sampleRate;
 	uint minSampleRate;
 	uint maxSampleRate;
+	uint triggerChannel;
 	uint triggerVal;
 	uint minTriggerVal;
 	uint maxTriggerVal;

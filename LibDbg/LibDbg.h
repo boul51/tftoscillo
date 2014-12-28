@@ -3,7 +3,7 @@
 
 // Set to 0 to disable debug
 // Set to 1 to enable debug
-#define LIBDBG_ENABLE	1
+#define LIBDBG_ENABLE	0
 
 class LibDbg
 {

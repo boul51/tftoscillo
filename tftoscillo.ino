@@ -11,26 +11,13 @@
 
 /**** DEFINES ****/
 
-#define DIMOF(x) (sizeof(x) / sizeof(x[0]))
-
-// Debug zones
-#define DBG_LOOP		false
-#define DBG_VERBOSE		false
-#define DBG_TEXT		false
-#define DBG_POTS		false
-#define DBG_DRAW		false
-#define DBG_DRAWMODE	false
-#define DBG_RX			false
-
-
-// TFT definitions
-#define TFT_CS_PIN   10 // Chip select pin
-#define TFT_DC_PIN    9 // Command / Display data pin
-#define TFT_RST_PIN   8 // Reset pin
-#define TFT_BL_PIN    6 // Backlight
-
-#define TFT_WIDTH   160
-#define TFT_HEIGHT  128
+// TFT screen definitions
+#define TFT_CS_PIN   10		// Chip select pin
+#define TFT_DC_PIN    9		// Command / Display data pin
+#define TFT_RST_PIN   8		// Reset pin
+#define TFT_BL_PIN    6		// Backlight
+#define TFT_WIDTH   160		// Screen width
+#define TFT_HEIGHT  128		// Screen height
 
 // Pot and scope input pins
 #define SCOPE_CHANNEL_1			7
@@ -38,14 +25,13 @@
 #define SCOPE_CHANNEL_3			2
 #define SCOPE_CHANNEL_4			1
 #define FREQ_CHANNEL			6
-#define ADC_DMA_RATE_CHANNEL	5
+#define ADC_RATE_CHANNEL		5
 #define TRIGGER_CHANNEL			4
 
 // Pot definitions
 
 #define POT_ANALOG_MAX_VAL (988*ANALOG_MAX_VAL/1000)	// This is used for pot input. Max value read is not 4096 but around 4050 ie 98.8%
 #define POT_ANALOG_DIFF				20					// Min difference between two pot value to consider is was moved
-
 
 #define TRIGGER_TIMEOUT				100
 
@@ -60,31 +46,15 @@
 
 // Tests show that ADC doesn't sample well with freq >= 1830000 Hz.
 // (Not so bad since nominal max rate is 1MHz)
-#define ADC_MIN_SAMPLE_RATE  100
-#define ADC_MAX_SAMPLE_RATE 100000
+#define ADC_MIN_SAMPLE_RATE			100
+#define ADC_MAX_SAMPLE_RATE			100000
 
-//#define ADC_MIN_SAMPLE_RATE		10000
-//#define ADC_MAX_SAMPLE_RATE		900000
+#define DAC_MIN_FREQ				1
+#define DAC_MAX_FREQ				1000
 
-//uint g_adcMinSampleRate = ADC_MIN_SAMPLE_RATE;
-//uint g_adcMaxSampleRate = ADC_MAX_SAMPLE_RATE;
-//uint g_adcSampleRate = ADC_MIN_SAMPLE_RATE;
-
-#define DAC_MIN_FREQ    1
-#define DAC_MAX_FREQ    1000
-
-#define TRIGGER_MIN_VAL    0
-#define TRIGGER_MAX_VAL    ANALOG_MAX_VAL
-//int g_triggerVal = TRIGGER_MAX_VAL / 2;
 int g_zoom = 1;
 
 uint g_frameRate = 0;		// Scope fps
-
-uint16_t g_samples0[TFT_WIDTH];
-uint16_t g_samples1[TFT_WIDTH];
-
-uint16_t *g_samples = g_samples0;
-
 
 AdcDma::TriggerMode g_triggerMode = AdcDma::RisingEdge;
 
@@ -136,9 +106,10 @@ SerialCommand SCmd;
 TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
 //int g_channels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2, SCOPE_CHANNEL_3, SCOPE_CHANNEL_4};
-uint16_t g_channels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2};
-//uint16_t g_channels [] = {SCOPE_CHANNEL_1};
-int g_channelsCount = sizeof(g_channels) / sizeof(g_channels[0]);
+uint16_t g_scopeChannels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2};
+uint16_t g_potChannels [] = {FREQ_CHANNEL, ADC_RATE_CHANNEL, TRIGGER_CHANNEL};
+int g_scopeChannelsCount = DIMOF(g_scopeChannels);
+int g_potChannelsCount = DIMOF(g_potChannels);
 
 // Channel descriptors
 CHANNEL_DESC *g_channelDescs;
@@ -157,6 +128,7 @@ SCOPE_STATE g_scopeState =
 	.sampleRate		= 100,
 	.minSampleRate	= ADC_MIN_SAMPLE_RATE,
 	.maxSampleRate	= ADC_MAX_SAMPLE_RATE,
+	.triggerChannel	= SCOPE_CHANNEL_1,
 	.triggerVal		= 2000,
 	.minTriggerVal	= 0,
 	.maxTriggerVal	= ANALOG_MAX_VAL,
@@ -172,12 +144,17 @@ SIG_STATE g_sigState =
 	.waveform		= GenSigDma::WaveFormSinus,
 };
 
-DRAW_STATE g_drawState;
+DRAW_STATE g_drawState =
+{
+	.bFinished		= true,
+	.bNeedsErase	= false,
+	.drawnFrames	= 0,
+	.mappedFrames	= 0,
+	.rxFrames		= 0,
+	.drawMode		= DRAW_MODE_SLOW
+};
 
 bool rxHandler(uint16_t *buffer, int bufLen, bool bIsTrigger, int triggerIndex, bool bTimeout);
-
-#define DRAW_MODE_SLOW		0
-#define DRAW_MODE_FAST		1
 
 POT_VAR g_potVars[] =
 {
@@ -187,7 +164,7 @@ POT_VAR g_potVars[] =
 		.minValue	= &g_scopeState.minTriggerVal,
 		.maxValue	= &g_scopeState.maxTriggerVal,
 		.value		= &g_scopeState.triggerVal,
-		.margin		= 20,
+		.margin		= POT_ANALOG_DIFF,
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "TRIG",
@@ -196,12 +173,12 @@ POT_VAR g_potVars[] =
 		}
 	},
 	{
-		.adcChannel	= ADC_DMA_RATE_CHANNEL,
+		.adcChannel	= ADC_RATE_CHANNEL,
 		.potValue	= 0,
 		.minValue	= &g_scopeState.minSampleRate,
 		.maxValue	= &g_scopeState.maxSampleRate,
 		.value		= &g_scopeState.sampleRate,
-		.margin		= 20,
+		.margin		= POT_ANALOG_DIFF,
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "RATE",
@@ -221,7 +198,7 @@ POT_VAR g_potVars[] =
 		.minValue	= &g_sigState.minFreq,
 		.maxValue	= &g_sigState.maxFreq,
 		.value		= &g_sigState.freq,
-		.margin		= 20,
+		.margin		= POT_ANALOG_DIFF,
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "FREQ",
@@ -241,11 +218,11 @@ void setup() {
 
 	Serial.begin(115200);
 
-	g_channelDescs = (CHANNEL_DESC *)malloc(g_channelsCount * sizeof(CHANNEL_DESC));
+	g_channelDescs = (CHANNEL_DESC *)malloc(g_scopeChannelsCount * sizeof(CHANNEL_DESC));
 
 	// Init channels descriptors
-	for (int i = 0; i < g_channelsCount; i++) {
-		g_channelDescs[i].channel = g_channels[i];
+	for (int i = 0; i < g_scopeChannelsCount; i++) {
+		g_channelDescs[i].channel = g_scopeChannels[i];
 		g_channelDescs[i].bufSize = TFT_WIDTH;
 
 		g_channelDescs[i].r = g_scopeColors[i][0];
@@ -269,34 +246,21 @@ void setup() {
 	SCmd.addDefaultHandler(defaultHandler);
 
 	// Initialize LCD
+	// Note: TFT library was modified to set SPI clock divider to 4
 	TFTscreen.begin();
 	TFTscreen.background(255, 255, 255);
-
-	// SPI.setClockDivider(TFT_CS_PIN, 1);
-	// Modified TFT library to set SPI clock divider to 1
 
 	g_genSigDma = new GenSigDma();
 	g_genSigDma->SetTimerChannel(1);
 
-	uint16_t adcChannel = SCOPE_CHANNEL_1;
 	g_adcDma = AdcDma::GetInstance();
-	g_adcDma->SetAdcChannels(&adcChannel, 1);
 	g_adcDma->SetTimerChannel(2);
 	g_adcDma->SetRxHandler(rxHandler);
 
-	// Call drawGrid to update g_minY and g_maxY
+	// This will update g_drawState.minY and g_drawState.maxY
 	drawGrid();
 
 	updatePotsVars(NULL);
-
-	g_genSigDma->SetWaveForm(g_sigState.waveform, (float)g_sigState.freq, NULL);
-	g_adcDma->SetSampleRate(g_scopeState.sampleRate);
-	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, SCOPE_CHANNEL_1, 1000);
-
-	initDrawState();
-
-	g_drawState.bFinished = true;
-	//g_drawState.drawMode = DRAW_MODE_SLOW;
 }
 
 void defaultHandler()
@@ -478,7 +442,7 @@ void formHandler()
 
 inline CHANNEL_DESC *getChannelDesc(int channel)
 {
-	for (int i = 0; i < g_channelsCount; i++) {
+	for (int i = 0; i < g_scopeChannelsCount; i++) {
 		if (g_channelDescs[i].channel == channel)
 			return &g_channelDescs[i];
 	}
@@ -532,7 +496,7 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 
 void swapSampleBuffer()
 {
-	for (int iChannel = 0; iChannel < g_channelsCount; iChannel++) {
+	for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
 		CHANNEL_DESC *pChannelDesc = &g_channelDescs[iChannel];
 		if (pChannelDesc->curSamples == pChannelDesc->samples[0]) {
 			pChannelDesc->curSamples = pChannelDesc->samples[1];
@@ -724,7 +688,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 
 		// Erase first old sample
 
-		for (int iChannel = 0; iChannel < g_channelsCount; iChannel++) {
+		for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
 			oldSamples = g_channelDescs[iChannel].oldSamples;
 			TFTscreen.stroke(BG_COLOR);
 			TFTscreen.line(0, oldSamples[0], s_prevZoom, oldSamples[1]);
@@ -735,7 +699,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 		// Erase sample iSample+1 while drawing sample iSample
 		// otherwise, new drawn line could be overwritten by erased line
 		for (;;) {
-			for (int iChannel = 0; iChannel < g_channelsCount; iChannel++) {
+			for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
 				oldSamples = g_channelDescs[iChannel].oldSamples;
 				// Erase old sample
 				if (iSample + 1 < TFT_WIDTH) {
@@ -745,7 +709,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 			}
 			lastXErase += s_prevZoom;
 
-			for (int iChannel = 0; iChannel < g_channelsCount; iChannel++) {
+			for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
 				newSamples = g_channelDescs[iChannel].curSamples;
 				// Draw new sample
 				TFTscreen.stroke(g_channelDescs[iChannel].r, g_channelDescs[iChannel].g, g_channelDescs[iChannel].b);
@@ -769,7 +733,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 
 			PF(false, "x0 %d, x1 %d, df %d, sf %d\r\n", xStart, xStart + 1, g_drawState.drawnFrames, g_drawState.mappedFrames);
 
-			for (int iChannel = 0; iChannel < g_channelsCount; iChannel++) {
+			for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
 				CHANNEL_DESC *pDesc = &g_channelDescs[iChannel];
 				TFTscreen.stroke(pDesc->r, pDesc->g, pDesc->b);
 				TFTscreen.line(xStart, pDesc->curSamples[xStart], xStart + 1, pDesc->curSamples[xStart + 1]);
@@ -785,7 +749,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 	else if (bErase) {
 		TFTscreen.stroke(BG_COLOR);
 		for (int iFrame = 0; iFrame < TFT_WIDTH; iFrame++) {
-			for (int iChannel = 0; iChannel < g_channelsCount; iChannel++) {
+			for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
 				CHANNEL_DESC *pDesc = &g_channelDescs[iChannel];
 				TFTscreen.line(iFrame - 1, pDesc->oldSamples[iFrame - 1], iFrame, pDesc->oldSamples[iFrame]);
 			}
@@ -809,18 +773,6 @@ void computeFrameRate()
 	s_loops++;
 }
 
-void enterScopeDrawMode(int drawMode)
-{
-	if (drawMode != g_drawState.drawMode) {
-		PF(DBG_DRAWMODE, "Entering %s mode\r\n", drawMode == DRAW_MODE_SLOW ? "slow" : "fast");
-		g_adcDma->Stop();
-		g_drawState.bFinished = true;
-		PF(true, "set bFinished\r\n");
-	}
-
-	g_drawState.drawMode = drawMode;
-}
-
 void initDrawState()
 {
 	PF(false, "++\r\n");
@@ -834,14 +786,6 @@ void initScopeState()
 	PF(false, "++\r\n");
 	g_scopeState.triggerStatus = TRIGGER_STATUS_WAITING;
 	g_scopeState.bTriggerStatusChanged = true;
-}
-
-void updateScopeFromPots()
-{
-}
-
-void updateGensigFromPots()
-{
 }
 
 void findTriggerSample(uint16_t *buffer, int buflen, int *triggerIndex)
@@ -859,7 +803,7 @@ void findTriggerSample(uint16_t *buffer, int buflen, int *triggerIndex)
 		sample = g_adcDma->sample(rawSample);
 		channel = g_adcDma->channel(rawSample);
 
-		if (channel != SCOPE_CHANNEL_1)
+		if (channel != g_scopeState.triggerChannel)
 			continue;
 
 		if (triggerMode == AdcDma::RisingEdge) {
@@ -909,17 +853,10 @@ bool rxHandler(uint16_t *buffer, int buflen, bool bIsTrigger, int triggerIndex, 
 {
 	int channelsCount = g_adcDma->GetAdcChannelsCount();
 	int framesInBuf;
-	uint prevTriggerStatus = g_scopeState.triggerStatus;
-
-	if (bIsTrigger || bTimeout) {
-		PF(false, "trigger %d timeout %d\r\n", bIsTrigger, bTimeout);
-	}
-
-	PF(false, "len %d, tg %d, to %d, tgst %d\r\n", buflen, bIsTrigger, bTimeout, g_scopeState.triggerStatus);
 
 	if (bTimeout && g_scopeState.triggerStatus == TRIGGER_STATUS_WAITING) {
-		PF(false, "Trigger timeout\r\n");
 		g_scopeState.triggerStatus = TRIGGER_STATUS_TIMEOUT;
+		g_scopeState.bTriggerStatusChanged = true;
 	}
 	else if (bIsTrigger) {
 
@@ -930,12 +867,10 @@ bool rxHandler(uint16_t *buffer, int buflen, bool bIsTrigger, int triggerIndex, 
 			findTriggerSample(buffer, buflen, &triggerIndex);
 		}
 
-		g_scopeState.triggerStatus = TRIGGER_STATUS_TRIGGERED;
 		buffer += triggerIndex;
 		buflen -= triggerIndex;
-	}
 
-	if (g_scopeState.triggerStatus != prevTriggerStatus) {
+		g_scopeState.triggerStatus = TRIGGER_STATUS_TRIGGERED;
 		g_scopeState.bTriggerStatusChanged = true;
 	}
 
@@ -946,43 +881,19 @@ bool rxHandler(uint16_t *buffer, int buflen, bool bIsTrigger, int triggerIndex, 
 	if (framesInBuf > TFT_WIDTH)
 		framesInBuf = TFT_WIDTH;
 
-	if (g_drawState.drawMode == DRAW_MODE_FAST) {
-		if (g_scopeState.triggerStatus == TRIGGER_STATUS_WAITING) {
-			PF(false, "Waiting\r\n");
-			return true;
-		}
-
-		PF(false, "mapping %d frames\r\n", framesInBuf);
-		// Debug: skip first frame, first sample is bad
-		/*
-		if (g_drawState.drawnFrames == 0) {
-			buffer += g_channelsCount;
-			framesInBuf--;
-		}*/
-		mapBufferValues(g_drawState.mappedFrames, buffer, framesInBuf);
-	}
-	else if (g_drawState.drawMode == DRAW_MODE_SLOW) {
-
+	if (g_drawState.drawMode == DRAW_MODE_SLOW) {
 		// Update pots values from last frame in buffer
 		// Note: skip first samples since they are not very accurate
 		if (g_drawState.rxFrames > 3) {
 			updatePotsVars(buffer + buflen - channelsCount);
 		}
-
-		// Do nothing if we did not get trigger yet
-		if (g_scopeState.triggerStatus == TRIGGER_STATUS_WAITING) {
-			return true;
-		}
-
-		//PF(true, "Calling mapBufferValues, framesInBuf %d\r\n", framesInBuf);
-		// Map values
-		mapBufferValues(g_drawState.mappedFrames, buffer, framesInBuf);
-		PF(false, "sampledFr frames is now %d (framesInBuf %d)\r\n", g_drawState.mappedFrames, framesInBuf);
-
-		// Update scope and gensig states from read values
-		updateScopeFromPots();
-		updateGensigFromPots();
 	}
+
+	if (g_scopeState.triggerStatus == TRIGGER_STATUS_WAITING) {
+		return true;
+	}
+
+	mapBufferValues(g_drawState.mappedFrames, buffer, framesInBuf);
 
 	// Stop AdcDma if we have enough samples
 	if (g_drawState.mappedFrames == TFT_WIDTH) {
@@ -990,14 +901,7 @@ bool rxHandler(uint16_t *buffer, int buflen, bool bIsTrigger, int triggerIndex, 
 		g_adcDma->Stop();
 	}
 
-	PF(DBG_RX && DBG_VERBOSE, "Sampled %d frames\r\n", g_drawState.mappedFrames);
-
 	return true;
-}
-
-void setupAdcDmaSlow()
-{
-	//g_adcDma->SetSampleRate(g_adcSampleRate);
 }
 
 POT_VAR *getPotVar(uint16_t channel)
@@ -1008,8 +912,6 @@ POT_VAR *getPotVar(uint16_t channel)
 	}
 	return NULL;
 }
-
-#define ABS_DIFF(a, b) (a > b ? a - b : b - a)
 
 void updatePotsVars(uint16_t *buffer)
 {
@@ -1069,43 +971,44 @@ void updatePotsVars(uint16_t *buffer)
 
 void setupAdcDma()
 {
-	if (g_scopeState.sampleRate < ADC_SAMPLE_RATE_LOW_LIMIT) {
-		int potChannels[] = {FREQ_CHANNEL, ADC_DMA_RATE_CHANNEL, TRIGGER_CHANNEL};
-		int potChannelsCount = DIMOF(potChannels);
-		int channelsCount = g_channelsCount + potChannelsCount;
-		uint16_t channels[256];
+	int buflen;
+	int bufcount = 10;
+	int channelsCount = 0;
+	uint16_t channels[ADC_DMA_MAX_ADC_CHANNEL];
 
-		for (int i = 0; i < g_channelsCount; i++) {
-			channels[i] = g_channels[i];
-		}
-		for (int i = 0; i < potChannelsCount; i++) {
-			channels[g_channelsCount + i] = potChannels[i];
-		}
+	// Add scope channels
+	for (int i = 0; i < g_scopeChannelsCount; i++) {
+		channels[i] = g_scopeChannels[i];
+		channelsCount++;
+	}
 
-		g_adcDma->SetAdcChannels(channels, channelsCount);
-		g_adcDma->SetBuffers(10, channelsCount);
+	// Add pot channels in slow mode
+	if (g_drawState.drawMode == DRAW_MODE_SLOW) {
+		for (int i = 0; i < g_potChannelsCount; i++) {
+			channels[g_scopeChannelsCount + i] = g_potChannels[i];
+			channelsCount++;
+		}
+	}
+
+	if (g_drawState.drawMode == DRAW_MODE_SLOW) {
+		buflen = sizeof(uint16_t) * channelsCount;
 	}
 	else {
-		g_adcDma->SetAdcChannels(g_channels, g_channelsCount);
-
-		// Calculate to have an IRQ every 1/10 s
-		int buflen;
-		// t = buflen / SR / sizeof(sample) / channelsCount => buflen = SR / 10 * sizeof(sample) * channelsCount
-		buflen = g_scopeState.sampleRate / 10 * sizeof(uint16_t) * g_channelsCount;
-
-		if (buflen > ADC_DMA_DEF_BUF_SIZE) {
-			buflen = ADC_DMA_DEF_BUF_SIZE;
-		}
-
-		PF(false, "Using buflen %d\r\n", buflen);
-
-		if (!g_adcDma->SetBuffers(5, buflen)) {
-			PF(true, "Failed in g_adcDma->SetBuffers!\r\n");
-		}
+		// Setup buflen for 1/10 sec duration
+		buflen = g_scopeState.sampleRate / 10 * sizeof(uint16_t) * g_scopeChannelsCount;
 	}
 
-	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, SCOPE_CHANNEL_1, 1000);
+	if (buflen > ADC_DMA_DEF_BUF_SIZE) {
+		buflen = ADC_DMA_DEF_BUF_SIZE;
+	}
 
+	if (buflen == 0) {
+		buflen = sizeof(uint16_t) * channelsCount;
+	}
+
+	g_adcDma->SetAdcChannels(channels, channelsCount);
+	g_adcDma->SetBuffers(bufcount, buflen);
+	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, 1000);
 }
 
 POT_VAR *getPotVar(const char *name)
@@ -1140,11 +1043,9 @@ void processPotVars()
 		drawTriggerArrow(potVar);
 		drawGrid();
 		// Force drawn samples to 0 to redraw all
-		PF(false, "Clearing drawnFrames (was %d)\r\n", g_drawState.drawnFrames);
 		g_drawState.drawnFrames = 0;
 		drawEraseSamples(true, false);
-		PF(false, "DrawnFrames is now %d\r\n", g_drawState.drawnFrames);
-		g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, SCOPE_CHANNEL_1, 1000);
+		g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, 1000);
 		potVar->changed = false;
 	}
 }
@@ -1169,8 +1070,6 @@ void loop()
 		else {
 			drawEraseSamples(true, false);
 		}
-
-		PF(false, "drawnFrames %d\r\n", g_drawState.drawnFrames);
 
 		if (g_drawState.drawnFrames >= TFT_WIDTH - 1) {
 			g_drawState.bFinished = true;
