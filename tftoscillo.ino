@@ -105,10 +105,9 @@ SerialCommand SCmd;
 // Tft screen instance
 TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
-//int g_channels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2, SCOPE_CHANNEL_3, SCOPE_CHANNEL_4};
-uint16_t g_scopeChannels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2};
+uint16_t g_scopeChannels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2, SCOPE_CHANNEL_3, SCOPE_CHANNEL_4};
 uint16_t g_potChannels [] = {FREQ_CHANNEL, ADC_RATE_CHANNEL, TRIGGER_CHANNEL};
-int g_scopeChannelsCount = DIMOF(g_scopeChannels);
+//int g_scopeChannelsCount = DIMOF(g_scopeChannels);
 int g_potChannelsCount = DIMOF(g_potChannels);
 
 // Channel descriptors
@@ -134,6 +133,10 @@ SCOPE_STATE g_scopeState =
 	.maxTriggerVal	= ANALOG_MAX_VAL,
 	.triggerStatus	= TRIGGER_STATUS_DISABLED,
 	.bTriggerStatusChanged = false,
+	.prevScopeChannelsCount = 1,
+	.scopeChannelsCount = 1,
+	.newScopeChannelsCount = 1,
+	.bScopeChannelsCountChanged = false,
 };
 
 SIG_STATE g_sigState =
@@ -218,10 +221,10 @@ void setup() {
 
 	Serial.begin(115200);
 
-	g_channelDescs = (CHANNEL_DESC *)malloc(g_scopeChannelsCount * sizeof(CHANNEL_DESC));
+	g_channelDescs = (CHANNEL_DESC *)malloc(DIMOF(g_scopeChannels) * sizeof(CHANNEL_DESC));
 
 	// Init channels descriptors
-	for (int i = 0; i < g_scopeChannelsCount; i++) {
+	for (uint i = 0; i < DIMOF(g_scopeChannels); i++) {
 		g_channelDescs[i].channel = g_scopeChannels[i];
 		g_channelDescs[i].bufSize = TFT_WIDTH;
 
@@ -243,6 +246,7 @@ void setup() {
 	SCmd.addCommand("sr", sampleRateRangeHandler);
 	SCmd.addCommand("zoom", zoomHandler);
 	SCmd.addCommand("form", formHandler);
+	SCmd.addCommand("ch", channelCountHandler);
 	SCmd.addDefaultHandler(defaultHandler);
 
 	// Initialize LCD
@@ -280,6 +284,21 @@ void zoomHandler()
 	}
 
 	g_zoom = atoi(strZoom);
+}
+
+void channelCountHandler()
+{
+	char * strCh;
+
+	strCh = SCmd.next();
+
+	if (strCh == NULL) {
+		Serial.println(g_scopeState.scopeChannelsCount);
+		return;
+	}
+
+	g_scopeState.newScopeChannelsCount = atoi(strCh);
+	g_scopeState.bScopeChannelsCountChanged = true;
 }
 
 void freqRangeHandler()
@@ -442,7 +461,7 @@ void formHandler()
 
 inline CHANNEL_DESC *getChannelDesc(int channel)
 {
-	for (int i = 0; i < g_scopeChannelsCount; i++) {
+	for (uint i = 0; i < DIMOF(g_scopeChannels); i++) {
 		if (g_channelDescs[i].channel == channel)
 			return &g_channelDescs[i];
 	}
@@ -496,7 +515,7 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 
 void swapSampleBuffer()
 {
-	for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
+	for (uint iChannel = 0; iChannel < DIMOF(g_scopeChannels); iChannel++) {
 		CHANNEL_DESC *pChannelDesc = &g_channelDescs[iChannel];
 		if (pChannelDesc->curSamples == pChannelDesc->samples[0]) {
 			pChannelDesc->curSamples = pChannelDesc->samples[1];
@@ -688,7 +707,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 
 		// Erase first old sample
 
-		for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
+		for (uint iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
 			oldSamples = g_channelDescs[iChannel].oldSamples;
 			TFTscreen.stroke(BG_COLOR);
 			TFTscreen.line(0, oldSamples[0], s_prevZoom, oldSamples[1]);
@@ -699,7 +718,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 		// Erase sample iSample+1 while drawing sample iSample
 		// otherwise, new drawn line could be overwritten by erased line
 		for (;;) {
-			for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
+			for (uint iChannel = 0; iChannel < g_scopeState.prevScopeChannelsCount; iChannel++) {
 				oldSamples = g_channelDescs[iChannel].oldSamples;
 				// Erase old sample
 				if (iSample + 1 < TFT_WIDTH) {
@@ -709,7 +728,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 			}
 			lastXErase += s_prevZoom;
 
-			for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
+			for (uint iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
 				newSamples = g_channelDescs[iChannel].curSamples;
 				// Draw new sample
 				TFTscreen.stroke(g_channelDescs[iChannel].r, g_channelDescs[iChannel].g, g_channelDescs[iChannel].b);
@@ -733,7 +752,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 
 			PF(false, "x0 %d, x1 %d, df %d, sf %d\r\n", xStart, xStart + 1, g_drawState.drawnFrames, g_drawState.mappedFrames);
 
-			for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
+			for (uint iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
 				CHANNEL_DESC *pDesc = &g_channelDescs[iChannel];
 				TFTscreen.stroke(pDesc->r, pDesc->g, pDesc->b);
 				TFTscreen.line(xStart, pDesc->curSamples[xStart], xStart + 1, pDesc->curSamples[xStart + 1]);
@@ -749,7 +768,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 	else if (bErase) {
 		TFTscreen.stroke(BG_COLOR);
 		for (int iFrame = 0; iFrame < TFT_WIDTH; iFrame++) {
-			for (int iChannel = 0; iChannel < g_scopeChannelsCount; iChannel++) {
+			for (uint iChannel = 0; iChannel < g_scopeState.prevScopeChannelsCount; iChannel++) {
 				CHANNEL_DESC *pDesc = &g_channelDescs[iChannel];
 				TFTscreen.line(iFrame - 1, pDesc->oldSamples[iFrame - 1], iFrame, pDesc->oldSamples[iFrame]);
 			}
@@ -976,8 +995,15 @@ void setupAdcDma()
 	int channelsCount = 0;
 	uint16_t channels[ADC_DMA_MAX_ADC_CHANNEL];
 
+	g_scopeState.prevScopeChannelsCount = g_scopeState.scopeChannelsCount;
+
+	if (g_scopeState.bScopeChannelsCountChanged) {
+		g_scopeState.scopeChannelsCount = g_scopeState.newScopeChannelsCount;
+		g_scopeState.bScopeChannelsCountChanged = false;
+	}
+
 	// Add scope channels
-	for (int i = 0; i < g_scopeChannelsCount; i++) {
+	for (uint i = 0; i < g_scopeState.scopeChannelsCount; i++) {
 		channels[i] = g_scopeChannels[i];
 		channelsCount++;
 	}
@@ -985,7 +1011,7 @@ void setupAdcDma()
 	// Add pot channels in slow mode
 	if (g_drawState.drawMode == DRAW_MODE_SLOW) {
 		for (int i = 0; i < g_potChannelsCount; i++) {
-			channels[g_scopeChannelsCount + i] = g_potChannels[i];
+			channels[g_scopeState.scopeChannelsCount + i] = g_potChannels[i];
 			channelsCount++;
 		}
 	}
@@ -995,7 +1021,7 @@ void setupAdcDma()
 	}
 	else {
 		// Setup buflen for 1/10 sec duration
-		buflen = g_scopeState.sampleRate / 10 * sizeof(uint16_t) * g_scopeChannelsCount;
+		buflen = g_scopeState.sampleRate / 10 * sizeof(uint16_t) * g_scopeState.scopeChannelsCount;
 	}
 
 	if (buflen > ADC_DMA_DEF_BUF_SIZE) {
@@ -1055,13 +1081,15 @@ void loop()
 	if ( (g_drawState.drawMode == DRAW_MODE_SLOW) ||
 		 (g_drawState.drawMode == DRAW_MODE_FAST && g_drawState.mappedFrames == TFT_WIDTH) ) {
 
-		// In slow mode, erase current samples if flag is set.
+		// In slow mode, erase current samples if flag is set and we have something to draw
 		// In fast mode, old samples are erased while the new ones are drawn
-		if (g_drawState.bNeedsErase && g_drawState.drawMode == DRAW_MODE_SLOW)
-		{
-			drawEraseSamples(false, true);
-			drawGrid();
-			g_drawState.bNeedsErase = false;
+		if (g_drawState.bNeedsErase) {
+			if ( (g_drawState.drawMode == DRAW_MODE_FAST) ||
+				 (g_drawState.drawMode == DRAW_MODE_SLOW && g_drawState.mappedFrames > 0) ) {
+				drawEraseSamples(false, true);
+				drawGrid();
+				g_drawState.bNeedsErase = false;
+			}
 		}
 
 		if (g_drawState.drawMode == DRAW_MODE_FAST) {

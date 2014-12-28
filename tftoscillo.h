@@ -55,6 +55,10 @@ typedef struct _SCOPE_STATE {
 	uint maxTriggerVal;
 	uint triggerStatus;
 	bool bTriggerStatusChanged;
+	uint prevScopeChannelsCount;
+	uint scopeChannelsCount;
+	uint newScopeChannelsCount;
+	bool bScopeChannelsCountChanged;
 }SCOPE_STATE;
 
 typedef struct _SIG_STATE {
