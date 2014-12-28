@@ -1165,13 +1165,22 @@ void loop()
 		initDrawState();
 		initScopeState();
 
-		g_drawState.bNeedsErase = true;
+		if (g_drawState.drawMode == DRAW_MODE_SLOW) {
+			g_drawState.bNeedsErase = true;
+		}
+
+		DRAW_MODE prevDrawMode = g_drawState.drawMode;
 
 		// Update draw mode depending on sample rate
 		if (g_scopeState.sampleRate < ADC_SAMPLE_RATE_LOW_LIMIT)
 			g_drawState.drawMode = DRAW_MODE_SLOW;
 		else
 			g_drawState.drawMode = DRAW_MODE_FAST;
+
+		// When draw mode changes, we need to erase prev samples
+		if (prevDrawMode != g_drawState.drawMode) {
+			g_drawState.bNeedsErase = true;
+		}
 
 		swapSampleBuffer();
 
