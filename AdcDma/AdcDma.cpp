@@ -148,19 +148,9 @@ bool AdcDma::SetBuffers(int bufCount, int bufSize)
 		return false;
 	}
 
-	/*
-
-	if (bufCount > ADC_DMA_DEF_BUF_COUNT) {
-		PF(DBG_INIT, "bufCount if bigger than ADC_DMA_DEF_BUF_COUNT (%d)\r\n", ADC_DMA_DEF_BUF_COUNT);
-		return false;
+	if (bufCount == m_bufCount && bufSize == m_bufSize) {
+		return true;
 	}
-
-	if (bufSize > ADC_DMA_DEF_BUF_SIZE) {
-		PF(DBG_INIT, "bufSize if bigger than ADC_DMA_DEF_BUF_SIZE (%d)\r\n", ADC_DMA_DEF_BUF_SIZE);
-		return false;
-	}
-
-	*/
 
 	if (bufCount > ADC_DMA_MAX_BUF_COUNT) {
 		PF(DBG_WARN, "bufCount (%d) is bigger than ADC_DMA_MAX_BUF_COUNT (%d)\r\n", bufCount, ADC_DMA_MAX_BUF_COUNT);
