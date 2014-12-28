@@ -167,6 +167,7 @@ POT_VAR g_potVars[] =
 		.minValue	= &g_scopeState.minTriggerVal,
 		.maxValue	= &g_scopeState.maxTriggerVal,
 		.value		= &g_scopeState.triggerVal,
+		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
 		.changed	= false,
 		.forceRead	= true,
@@ -181,6 +182,7 @@ POT_VAR g_potVars[] =
 		.minValue	= &g_scopeState.minSampleRate,
 		.maxValue	= &g_scopeState.maxSampleRate,
 		.value		= &g_scopeState.sampleRate,
+		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
 		.changed	= false,
 		.forceRead	= true,
@@ -188,7 +190,6 @@ POT_VAR g_potVars[] =
 		.display	= {
 			.bValid			= true,
 			.bNeedsErase	= false,
-			.prevValue		= 0,
 			.prefix			= "SR:",
 			.suffix			= "Hz",
 			.x				= TFT_WIDTH / 2,
@@ -201,6 +202,7 @@ POT_VAR g_potVars[] =
 		.minValue	= &g_sigState.minFreq,
 		.maxValue	= &g_sigState.maxFreq,
 		.value		= &g_sigState.freq,
+		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
 		.changed	= false,
 		.forceRead	= true,
@@ -208,7 +210,6 @@ POT_VAR g_potVars[] =
 		.display	= {
 			.bValid			= true,
 			.bNeedsErase	= false,
-			.prevValue		= 0,
 			.prefix			= "Fq:",
 			.suffix			= "Hz",
 			.x				= 10,
@@ -540,7 +541,7 @@ void drawTriggerArrow(POT_VAR *potVar)
 		if (i == 0) {
 			// Erase
 			TFTscreen.stroke(BG_COLOR);
-			y = potVar->display.prevValue;
+			y = potVar->prevValue;
 		}
 		else {
 			// Draw
@@ -574,7 +575,7 @@ void drawPotVar(POT_VAR *potVar)
 		s = String(potVar->display.prefix);
 		if (i == 0) {
 			// erase prev value
-			s += String(potVar->display.prevValue);
+			s += String(potVar->prevValue);
 			TFTscreen.stroke(BG_COLOR);
 		}
 		else {
@@ -587,7 +588,7 @@ void drawPotVar(POT_VAR *potVar)
 		TFTscreen.text(textBuf, potVar->display.x, potVar->display.y);
 	}
 
-	potVar->display.prevValue = *potVar->value;
+	//potVar->prevValue = *potVar->value;
 	potVar->display.bNeedsErase = true;
 }
 
@@ -967,7 +968,7 @@ void updatePotsVars(uint16_t *buffer)
 				if (value > *potVar->maxValue)
 					value = *potVar->maxValue;
 				potVar->potValue = potValue;
-				potVar->display.prevValue = *potVar->value;
+				potVar->prevValue = *potVar->value;
 				*potVar->value = value;
 				potVar->changed = true;
 				potVar->forceRead = false;
@@ -991,7 +992,7 @@ void updatePotsVars(uint16_t *buffer)
 void setupAdcDma()
 {
 	int buflen;
-	int bufcount = 10;
+	int bufcount = 5;
 	int channelsCount = 0;
 	uint16_t channels[ADC_DMA_MAX_ADC_CHANNEL];
 
@@ -1023,6 +1024,8 @@ void setupAdcDma()
 		// Setup buflen for 1/10 sec duration
 		buflen = g_scopeState.sampleRate / 10 * sizeof(uint16_t) * g_scopeState.scopeChannelsCount;
 	}
+
+	PF(true, "buflen %d\r\n", buflen);
 
 	if (buflen > ADC_DMA_DEF_BUF_SIZE) {
 		buflen = ADC_DMA_DEF_BUF_SIZE;
@@ -1061,6 +1064,11 @@ void processPotVars()
 	potVar = getPotVar("RATE");
 	if (potVar->changed) {
 		drawPotVar(potVar);
+		// If we go from slow to fast mode, we need to restart AdcDma
+		if ( (g_drawState.drawMode == DRAW_MODE_SLOW) && (*potVar->value >= ADC_SAMPLE_RATE_LOW_LIMIT) ) {
+			g_adcDma->Stop();
+			g_drawState.bFinished = true;
+		}
 		g_adcDma->SetSampleRate(g_scopeState.sampleRate);
 		potVar->changed = false;
 	}

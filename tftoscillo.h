@@ -71,7 +71,6 @@ typedef struct _SIG_STATE {
 typedef struct _POT_VAR_DISPLAY {
 	bool bValid;
 	bool bNeedsErase;
-	int  prevValue;
 	const char *prefix;
 	const char *suffix;
 	int x;
@@ -84,6 +83,7 @@ typedef struct _POT_VAR {
 	uint *minValue;
 	uint *maxValue;
 	uint *value;
+	uint prevValue;
 	uint margin;
 	bool changed;
 	bool forceRead;
