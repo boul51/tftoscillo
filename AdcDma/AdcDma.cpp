@@ -103,10 +103,6 @@ void AdcDma::Start()
 	ev.eventKind = TriggerEventKindEnable;
 	triggerUpdateState(&ev);
 
-	for (int iBuf = 0; iBuf < m_bufCount; iBuf++) {
-		memset(m_buffers[iBuf], 0, m_bufSize * sizeof(uint16_t));
-	}
-
 	configureTimer();
 	configureDma();
 	startAdc();
