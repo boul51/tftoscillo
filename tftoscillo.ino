@@ -279,7 +279,7 @@ void setup() {
 	g_adcDma->SetTriggerPreBuffersCount(0);
 
 	// This will update g_drawState.minY and g_drawState.maxY
-	drawGrid();
+	drawGrid(0, TFT_WIDTH);
 
 	updatePotsVars(NULL);
 }
@@ -657,7 +657,7 @@ void drawTriggerStatus()
 	}
 }
 
-void drawGrid()
+void drawGrid(int minX, int maxX)
 {
 	PF(false, "++\r\n");
 	// Min and max y for horizontal lines
@@ -683,8 +683,8 @@ void drawGrid()
 		}
 		loop++;
 
-		TFTscreen.line(0,  yStart + yOffset, TFT_WIDTH, yStart + yOffset);
-		TFTscreen.line(0,  yStart - yOffset, TFT_WIDTH, yStart - yOffset);
+		TFTscreen.line(minX,  yStart + yOffset, maxX, yStart + yOffset);
+		TFTscreen.line(minX,  yStart - yOffset, maxX, yStart - yOffset);
 		if (yStart + yOffset + margin < TFT_HEIGHT)
 			maxY = yStart + yOffset;
 		if (yStart - yOffset > margin)
@@ -696,7 +696,7 @@ void drawGrid()
 	TFTscreen.stroke(VGRID_COLOR);
 	int xStart = VGRID_START;
 	int xOffset = 0;
-	while ( (xStart + xOffset < TFT_WIDTH) || (xStart - xOffset > 0) ) {
+	while ( (xStart + xOffset <= maxX) || (xStart - xOffset >= minX) ) {
 
 		if (loop % secLoop == 0) {
 			TFTscreen.stroke(VGRID_COLOR);
@@ -706,8 +706,12 @@ void drawGrid()
 		}
 		loop++;
 
-		TFTscreen.line(xStart + xOffset, minY, xStart + xOffset, maxY);
-		TFTscreen.line(xStart - xOffset, minY, xStart - xOffset, maxY);
+		if ( (xStart + xOffset >= minX) && (xStart + xOffset <= maxX)) {
+			TFTscreen.line(xStart + xOffset, minY, xStart + xOffset, maxY);
+		}
+		if ( (xStart - xOffset >= minX) && (xStart - xOffset <= maxX)) {
+			TFTscreen.line(xStart - xOffset, minY, xStart - xOffset, maxY);
+		}
 		xOffset += VGRID_INTERVAL;
 	}
 
@@ -750,6 +754,11 @@ void drawEraseSamples(bool bDraw, bool bErase)
 					TFTscreen.line(lastXErase, oldSamples[iSample], lastXErase + s_prevZoom, oldSamples[iSample + 1]);
 				}
 			}
+
+			// In this mode, we need to redraw part of the grid after samples were erased and before
+			// new samples are drawn
+			drawGrid(lastXErase, lastXErase + s_prevZoom);
+
 			lastXErase += s_prevZoom;
 
 			for (uint iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
@@ -1121,7 +1130,7 @@ void processPotVars()
 	potVar = getPotVar("TRIG");
 	if (potVar->changed) {
 		drawTriggerArrow(potVar);
-		drawGrid();
+		drawGrid(0, TFT_WIDTH);
 		// Force drawn samples to 0 to redraw all
 		g_drawState.drawnFrames = 0;
 		drawEraseSamples(true, false);
@@ -1141,20 +1150,20 @@ void loop()
 			if ( (g_drawState.drawMode == DRAW_MODE_FAST) ||
 				 (g_drawState.drawMode == DRAW_MODE_SLOW && g_drawState.mappedFrames > 0) ) {
 				drawEraseSamples(false, true);
-				drawGrid();
+				drawGrid(0, TFT_WIDTH);
 				drawTriggerArrow(getPotVar("TRIG"));
 				g_drawState.bNeedsErase = false;
 			}
 		}
 
 		if (g_drawState.drawMode == DRAW_MODE_FAST) {
+			// In fast mode, grid is drawn by drawEraseSamples
 			drawEraseSamples(true, true);
 		}
 		else {
 			int prevDrawnFrames = g_drawState.drawnFrames;
 			drawEraseSamples(true, false);
-			// We need to redraw arrow after first samples, or the trigger arrow might be
-			// deleted
+			// We need to redraw arrow after first samples, or the trigger arrow might be deleted
 			if (prevDrawnFrames != g_drawState.drawnFrames && g_drawState.drawnFrames <= TRIGGER_ARROW_LEN) {
 				POT_VAR *potVar = getPotVar("TRIG");
 				//drawTriggerArrow(potVar);
@@ -1211,7 +1220,7 @@ void loop()
 		// In slow mode, this will be done when we get first samples
 		if (g_drawState.drawMode == DRAW_MODE_FAST) {
 			drawTriggerArrow(getPotVar("TRIG"));
-			drawGrid();
+			//drawGrid(0, TFT_WIDTH);
 		}
 
 		computeFrameRate();
