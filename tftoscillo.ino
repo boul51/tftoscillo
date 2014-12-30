@@ -1024,9 +1024,11 @@ void updatePotsVars(uint16_t *buffer)
 
 void setupAdcDma()
 {
-	int buflen;
-	int bufcount = 5;
-	int channelsCount = 0;
+	int  buflen;				// Size of ADC DMA buffers
+	int  bufcount = 5;			// Number of ADC DMA buffers
+	uint irqsPerSec;			// Number of ADC DMA IRQs/sec
+	uint maxIrqsPerSec = 500;	// Max number of ADC DMA IRQs/sec we want
+	int  channelsCount = 0;
 	uint16_t channels[ADC_DMA_MAX_ADC_CHANNEL];
 
 	g_scopeState.prevScopeChannelsCount = g_scopeState.scopeChannelsCount;
@@ -1054,19 +1056,30 @@ void setupAdcDma()
 		buflen = sizeof(uint16_t) * channelsCount;
 	}
 	else {
-		// Setup buflen for 1/10 sec duration
-		buflen = g_scopeState.sampleRate / 10 * sizeof(uint16_t) * g_scopeState.scopeChannelsCount;
+		// Setup buflen to be sure we have enough samples to fill the screen
+		buflen = TFT_WIDTH / (bufcount - 1) * sizeof(uint16_t) * channelsCount;
+
+		// Adjust buffers length so that number of irqs is lower than the limit we fixed
+		// Note: If sample rate is too high, we will be higher anyway since buffers size
+		// is limited by ADC_MAX_MEM
+		irqsPerSec = g_scopeState.sampleRate / buflen * sizeof(uint16_t) * channelsCount;
+		if (irqsPerSec > maxIrqsPerSec) {
+			PF(DBG_BUFFERS, "ajusting buflen, was %d\r\n", buflen);
+			buflen = g_scopeState.sampleRate / maxIrqsPerSec * sizeof(uint16_t) * channelsCount ;
+		}
+
+		PF(DBG_BUFFERS, "Calculated buflen %d, irqs/s %d\r\n", buflen, g_scopeState.sampleRate / buflen * sizeof(uint16_t) * channelsCount);
 	}
 
-	PF(true, "buflen %d\r\n", buflen);
-
-	if (buflen > ADC_DMA_DEF_BUF_SIZE) {
-		buflen = ADC_DMA_DEF_BUF_SIZE;
+	if (buflen * bufcount > ADC_DMA_MAX_MEM) {
+		buflen = ADC_DMA_MAX_MEM / bufcount;
 	}
 
 	if (buflen == 0) {
 		buflen = sizeof(uint16_t) * channelsCount;
 	}
+
+	PF(DBG_BUFFERS, "buflen %d\r\n", buflen);
 
 	g_adcDma->SetAdcChannels(channels, channelsCount);
 	g_adcDma->SetBuffers(bufcount, buflen);

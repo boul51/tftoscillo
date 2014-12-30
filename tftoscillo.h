@@ -13,6 +13,7 @@
 #define DBG_DRAW		false
 #define DBG_DRAWMODE	false
 #define DBG_RX			false
+#define DBG_BUFFERS		false
 
 // Resolution for analog input and outputs
 #define ANALOG_RES    12
