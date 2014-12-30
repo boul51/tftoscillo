@@ -276,6 +276,7 @@ void setup() {
 	g_adcDma = AdcDma::GetInstance();
 	g_adcDma->SetTimerChannel(2);
 	g_adcDma->SetRxHandler(rxHandler);
+	g_adcDma->SetTriggerPreBuffersCount(0);
 
 	// This will update g_drawState.minY and g_drawState.maxY
 	drawGrid();
@@ -553,7 +554,7 @@ void drawTriggerArrow(POT_VAR *potVar)
 	// Redraw trigger line (always since signal may overwrite it)
 	for (int i = 0; i < 2; i++) {
 		int y;
-		if (i == 0) {
+		if (i == 0 && potVar->changed) {
 			// Erase
 			TFTscreen.stroke(BG_COLOR);
 			y = potVar->prevValue;
@@ -769,7 +770,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 		}
 		g_drawState.drawnFrames = TFT_WIDTH - 1;
 	}
-	// Draw all currently samples framed (used in slow mode)
+	// Draw all currently sampled frames (used in slow mode)
 	else if (bDraw) {
 		for (int xStart = g_drawState.drawnFrames; xStart + 1 < g_drawState.mappedFrames; xStart++) {
 
@@ -1128,6 +1129,7 @@ void loop()
 				 (g_drawState.drawMode == DRAW_MODE_SLOW && g_drawState.mappedFrames > 0) ) {
 				drawEraseSamples(false, true);
 				drawGrid();
+				drawTriggerArrow(getPotVar("TRIG"));
 				g_drawState.bNeedsErase = false;
 			}
 		}
@@ -1136,7 +1138,14 @@ void loop()
 			drawEraseSamples(true, true);
 		}
 		else {
+			int prevDrawnFrames = g_drawState.drawnFrames;
 			drawEraseSamples(true, false);
+			// We need to redraw arrow after first samples, or the trigger arrow might be
+			// deleted
+			if (prevDrawnFrames != g_drawState.drawnFrames && g_drawState.drawnFrames <= TRIGGER_ARROW_LEN) {
+				POT_VAR *potVar = getPotVar("TRIG");
+				//drawTriggerArrow(potVar);
+			}
 		}
 
 		if (g_drawState.drawnFrames >= TFT_WIDTH - 1) {
@@ -1185,8 +1194,12 @@ void loop()
 		swapSampleBuffer();
 
 		drawTriggerStatus();
-		drawTriggerArrow(getPotVar("TRIG"));
-		drawGrid();
+
+		// In slow mode, this will be done when we get first samples
+		if (g_drawState.drawMode == DRAW_MODE_FAST) {
+			drawTriggerArrow(getPotVar("TRIG"));
+			drawGrid();
+		}
 
 		computeFrameRate();
 		drawVar(&g_fpsVarDisplay);
