@@ -70,6 +70,9 @@ typedef struct _SIG_STATE {
 	GenSigDma::WaveForm waveform;
 }SIG_STATE;
 
+struct _VAR_DISPLAY;
+typedef void (*cbDrawVar_t)(struct _VAR_DISPLAY *);
+
 typedef struct _VAR_DISPLAY {
 	bool bNeedsErase;
 	const char *prefix;
@@ -78,6 +81,7 @@ typedef struct _VAR_DISPLAY {
 	uint prevValue;
 	int x;
 	int y;
+	cbDrawVar_t cbDrawVar;
 }VAR_DISPLAY;
 
 typedef struct _POT_VAR {

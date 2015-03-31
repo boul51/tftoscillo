@@ -23,13 +23,13 @@
 #define TFT_CS_PIN   13		// Chip select pin
 
 // Pot and scope inputs
-#define SCOPE_CHANNEL_1			7
-#define SCOPE_CHANNEL_2			3
-#define SCOPE_CHANNEL_3			2
-#define SCOPE_CHANNEL_4			1
-#define FREQ_CHANNEL			6
-#define ADC_RATE_CHANNEL		5
-#define TRIGGER_CHANNEL			4
+#define SCOPE_CHANNEL_1			6
+#define SCOPE_CHANNEL_2			7
+#define SCOPE_CHANNEL_3			5
+#define SCOPE_CHANNEL_4			4
+#define FREQ_CHANNEL			3
+#define ADC_RATE_CHANNEL		2
+#define TRIGGER_CHANNEL			1
 
 // Pot definitions
 
@@ -97,11 +97,13 @@ SerialCommand SCmd;
 #define TEXT_DOWN_Y_OFFSET		TFT_HEIGHT - TEXT_UP_Y_OFFSET - TEXT_FONT_HEIGHT
 
 // Grid definitions
-#define VGRID_START		(TFT_WIDTH / 2)		// x-axis position of the first vertical line
-#define VGRID_INTERVAL  25					// distance between vertical lines
+#define VGRID_START			(TFT_WIDTH / 2)	// x-axis position of the first vertical line
+#define VGRID_INTERVAL		50				// distance between vertical lines
+#define VGRID_SUB_INTERVAL	25				// distance between sub divisions
 
-#define HGRID_START     (TFT_HEIGHT / 2)	// y-axis position of the first horizontal line
-#define HGRID_INTERVAL  VGRID_INTERVAL		// distance between horizontal lines
+#define HGRID_START			(TFT_HEIGHT / 2)// y-axis position of the first horizontal line
+#define HGRID_INTERVAL		VGRID_INTERVAL	// distance between horizontal lines
+#define HGRID_SUB_INTERVAL	VGRID_SUB_INTERVAL
 
 #define HGRID_MARGIN	10					// distance between border and first horizontal line
 
@@ -200,6 +202,7 @@ POT_VAR g_potVars[] =
 			.prevValue		= 0,
 			.x				= TFT_WIDTH / 2,
 			.y				= TEXT_UP_Y_OFFSET,
+			.cbDrawVar      = drawVarRate,
 		}
 	},
 	{
@@ -222,6 +225,7 @@ POT_VAR g_potVars[] =
 			.prevValue		= 0,
 			.x				= 10,
 			.y				= TEXT_UP_Y_OFFSET,
+			.cbDrawVar      = drawVar,
 		}
 	}
 };
@@ -235,6 +239,7 @@ VAR_DISPLAY g_fpsVarDisplay =
 	.prevValue		= 0,
 	.x				= 10,
 	.y				= TEXT_DOWN_Y_OFFSET,
+	.cbDrawVar      = drawVar,
 };
 
 void setup() {
@@ -315,6 +320,7 @@ void zoomHandler()
 void channelCountHandler()
 {
 	char * strCh;
+	int chCnt;
 
 	strCh = SCmd.next();
 
@@ -323,7 +329,15 @@ void channelCountHandler()
 		return;
 	}
 
-	g_scopeState.newScopeChannelsCount = atoi(strCh);
+	chCnt = atoi(strCh);
+
+	if (chCnt <= 0 || chCnt > DIMOF(g_scopeChannels)) {
+		Serial.print("Invalid channels count ");
+		Serial.println(chCnt);
+		return;
+	}
+
+	g_scopeState.newScopeChannelsCount = chCnt;
 	g_scopeState.bScopeChannelsCountChanged = true;
 }
 
@@ -619,13 +633,44 @@ void drawPotVar(POT_VAR *potVar)
 {
 	potVar->display.value = *potVar->value;
 	potVar->display.prevValue = potVar->prevValue;
-
-	drawVar(&potVar->display);
+	potVar->display.cbDrawVar(&potVar->display);
 }
 
 void drawVar(VAR_DISPLAY *var)
 {
 	char textBuf[40];
+
+	for (int i = 0; i < 2; i++) {
+
+		// Don't erase if not needed
+		if (i == 0 && !var->bNeedsErase)
+			continue;
+
+		String s;
+		s = String(var->prefix);
+		if (i == 0) {
+			// erase prev value
+			s += String(var->prevValue);
+			TFTscreen.stroke(BG_COLOR);
+		}
+		else {
+			// draw new value
+			s += String(var->value);
+			TFTscreen.stroke(TEXT_COLOR);
+		}
+		s += String(var->suffix);
+		s.toCharArray(textBuf, 15);
+		TFTscreen.text(textBuf, var->x, var->y);
+	}
+
+	var->bNeedsErase = true;
+}
+
+void drawVarRate(VAR_DISPLAY *var)
+{
+	char textBuf[40];
+
+	// Compute number of
 
 	for (int i = 0; i < 2; i++) {
 
@@ -705,7 +750,7 @@ void drawGrid(int minX, int maxX)
 	// Use this to draw secondary lines
 	int loop = 0;
 	// Draw one line dark, one line light
-	int secLoop = 2;
+	int secLoop = HGRID_INTERVAL / HGRID_SUB_INTERVAL;
 
 	// Draw horizontal grid (horizontal lines)
 	int yStart = HGRID_START;
@@ -727,13 +772,15 @@ void drawGrid(int minX, int maxX)
 			maxY = yStart + yOffset;
 		if (yStart - yOffset > margin)
 			minY = yStart - yOffset;
-		yOffset += HGRID_INTERVAL;
+		yOffset += HGRID_SUB_INTERVAL;
 	}
 
 	// Draw vertival grid (vertical lines)
 	TFTscreen.stroke(VGRID_COLOR);
 	int xStart = VGRID_START;
 	int xOffset = 0;
+	loop = 0;
+	secLoop = VGRID_INTERVAL / VGRID_SUB_INTERVAL;
 	while ( (xStart + xOffset <= maxX) || (xStart - xOffset >= minX) ) {
 
 		if (loop % secLoop == 0) {
@@ -750,7 +797,7 @@ void drawGrid(int minX, int maxX)
 		if ( (xStart - xOffset >= minX) && (xStart - xOffset <= maxX)) {
 			TFTscreen.line(xStart - xOffset, minY, xStart - xOffset, maxY);
 		}
-		xOffset += VGRID_INTERVAL;
+		xOffset += VGRID_SUB_INTERVAL;
 	}
 
 	g_minY = minY;
@@ -1156,6 +1203,8 @@ void processPotVars()
 	}
 	potVar = getPotVar("RATE");
 	if (potVar->changed) {
+		// Compute scope rate in s/div
+
 		drawPotVar(potVar);
 		// If we go from slow to fast mode, we need to restart AdcDma
 		if ( (g_drawState.drawMode == DRAW_MODE_SLOW) && (*potVar->value >= ADC_SAMPLE_RATE_LOW_LIMIT) ) {
