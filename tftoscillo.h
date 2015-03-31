@@ -60,6 +60,7 @@ typedef struct _SCOPE_STATE {
 	uint scopeChannelsCount;
 	uint newScopeChannelsCount;
 	bool bScopeChannelsCountChanged;
+	uint blVal;
 }SCOPE_STATE;
 
 typedef struct _SIG_STATE {

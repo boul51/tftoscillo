@@ -12,14 +12,17 @@
 /**** DEFINES ****/
 
 // TFT screen definitions
-#define TFT_CS_PIN   10		// Chip select pin
-#define TFT_DC_PIN    9		// Command / Display data pin
-#define TFT_RST_PIN   8		// Reset pin
-#define TFT_BL_PIN    6		// Backlight
 #define TFT_WIDTH   160		// Screen width
 #define TFT_HEIGHT  128		// Screen height
 
-// Pot and scope input pins
+// LCD/SD outputs
+#define TFT_BL_PIN    9		// Backlight
+#define TFT_RST_PIN  10		// Reset pin
+#define TFT_DC_PIN   11		// Command / Display data pin
+#define USD_CS_PIN	 12	    // MicroSD chip select
+#define TFT_CS_PIN   13		// Chip select pin
+
+// Pot and scope inputs
 #define SCOPE_CHANNEL_1			7
 #define SCOPE_CHANNEL_2			3
 #define SCOPE_CHANNEL_3			2
@@ -137,6 +140,7 @@ SCOPE_STATE g_scopeState =
 	.scopeChannelsCount = 1,
 	.newScopeChannelsCount = 1,
 	.bScopeChannelsCountChanged = false,
+	.blVal = 100,
 };
 
 SIG_STATE g_sigState =
@@ -263,12 +267,17 @@ void setup() {
 	SCmd.addCommand("zoom", zoomHandler);
 	SCmd.addCommand("form", formHandler);
 	SCmd.addCommand("ch", channelCountHandler);
+	SCmd.addCommand("bl", blHandler);
 	SCmd.addDefaultHandler(defaultHandler);
 
 	// Initialize LCD
 	// Note: TFT library was modified to set SPI clock divider to 4
+	// We use setRotation to reverse the screen
 	TFTscreen.begin();
+	TFTscreen.setRotation(3);
 	TFTscreen.background(255, 255, 255);
+	analogWriteResolution(ANALOG_RES);
+	analogWrite(TFT_BL_PIN, 0);
 
 	g_genSigDma = new GenSigDma();
 	g_genSigDma->SetTimerChannel(1);
@@ -474,6 +483,35 @@ void formHandler()
 	}
 
 	PF(true, "TODO\r\n");
+}
+
+void blHandler()
+{
+	char * strBl = SCmd.next();
+	int blVal;
+
+	if (strBl == NULL) {
+		Serial.print(g_scopeState.blVal);
+		Serial.println("");
+		return;
+	}
+
+	blVal = atol(strBl);
+
+	if (blVal < 0 || blVal > 100) {
+		Serial.print("Invalid backlight value ");
+		Serial.println(blVal);
+		return;
+	}
+
+	g_scopeState.blVal = blVal;
+	Serial.print("Setting backlight value: ");
+	Serial.println(blVal);
+
+	blVal = map(blVal, 100, 0, 0, ANALOG_MAX_VAL);
+	analogWrite(TFT_BL_PIN, blVal);
+
+	return;
 }
 
 inline CHANNEL_DESC *getChannelDesc(int channel)
