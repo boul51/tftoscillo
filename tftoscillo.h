@@ -78,6 +78,7 @@ typedef struct _VAR_DISPLAY {
 	bool bNeedsErase;
 	const char *prefix;
 	const char *suffix;
+	const char *prevSuffix;
 	uint value;
 	uint prevValue;
 	int x;
@@ -94,9 +95,8 @@ typedef struct _POT_VAR {
 	uint *value;
 	uint prevValue;
 	uint margin;
-	bool changed;
 	bool forceRead;
-	char name[5];
+	const char *name;
 	cbPotVarChanged_t cbPotVarChanged;
 	bool bHasVarDisplay;
 	VAR_DISPLAY display;

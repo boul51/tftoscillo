@@ -211,10 +211,9 @@ POT_VAR g_potVars[] =
 		.value		= &g_scopeState.triggerVal,
 		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
-		.changed	= false,
 		.forceRead	= true,
 		.name		= "TRIG",
-		.cbPotVarChanged = NULL,
+		.cbPotVarChanged = cbPotVarChangedTrig,
 		.bHasVarDisplay = false,
 		.display	= {
 		}
@@ -228,9 +227,8 @@ POT_VAR g_potVars[] =
 		.value		= NULL,
 		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
-		.changed	= false,
 		.forceRead	= true,
-		.name		= "GAI1",
+		.name		= "GAIN1",
 		.cbPotVarChanged = NULL,
 		.bHasVarDisplay = false,
 		.display	= {
@@ -245,15 +243,15 @@ POT_VAR g_potVars[] =
 		.value		= NULL,
 		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
-		.changed	= false,
 		.forceRead	= true,
 		.name		= "RATE",
-		.cbPotVarChanged = NULL,
+		.cbPotVarChanged = cbPotVarChangedRate,
 		.bHasVarDisplay = true,
 		.display	= {
 			.bNeedsErase	= false,
 			.prefix			= "SR:",
 			.suffix			= "Hz",
+			.prevSuffix		= "",
 			.value			= 0,
 			.prevValue		= 0,
 			.x				= TFT_WIDTH / 2,
@@ -270,15 +268,15 @@ POT_VAR g_potVars[] =
 		.value		= NULL,
 		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
-		.changed	= false,
 		.forceRead	= true,
 		.name		= "FREQ",
-		.cbPotVarChanged = NULL,
+		.cbPotVarChanged = cbPotVarChangedFreq,
 		.bHasVarDisplay = true,
 		.display	= {
 			.bNeedsErase	= false,
 			.prefix			= "Fq:",
 			.suffix			= "Hz",
+			.prevSuffix		= "",
 			.value			= 0,
 			.prevValue		= 0,
 			.x				= 10,
@@ -293,6 +291,7 @@ VAR_DISPLAY g_fpsVarDisplay =
 	.bNeedsErase	= false,
 	.prefix			= "Fps:",
 	.suffix			= "",
+	.prevSuffix		= "",
 	.value			= 0,
 	.prevValue		= 0,
 	.x				= 10,
@@ -602,10 +601,7 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 	int channelsCount = g_adcDma->GetAdcChannelsCount();
 	int gains[DIMOF(g_scopeChannels)] = {1};
 
-	gains[0] = gainFromPotValue(getPotVar("GAI1")->potValue);
-
-	Serial.print("Got gain for channel 1: ");
-	Serial.println(gains[0]);
+	gains[0] = gainFromPotValue(getPotVar("GAIN1")->potValue);
 
 	CHANNEL_DESC *channelDesc = &g_channelDescs[0];
 
@@ -672,12 +668,12 @@ void drawBegin()
 {
 }
 
-void drawTriggerArrow(POT_VAR *potVar)
+void drawTriggerArrow(POT_VAR *potVar, bool potVarChanged)
 {
 	// Redraw trigger line (always since signal may overwrite it)
 	for (int i = 0; i < 2; i++) {
 		int y;
-		if (i == 0 && potVar->changed) {
+		if (i == 0 && potVarChanged) {
 			// Erase
 			TFTscreen.stroke(BG_COLOR);
 			y = potVar->prevValue;
@@ -1167,7 +1163,7 @@ void updatePotsVars(uint16_t *buffer)
 			g_adcDma->ReadSingleValue(potVar->adcChannel, &potValue);
 		}
 
-		if (potVar && !potVar->changed) {
+		if (potVar) {
 			diff = ABS_DIFF(potVar->potValue, potValue);
 			if (diff > potVar->margin || potVar->forceRead) {
 				// Pot val might be out of bounds. In this case, crop value
@@ -1181,16 +1177,17 @@ void updatePotsVars(uint16_t *buffer)
 				else {
 					value = potValue;
 				}
-				potVar->prevPotValue = potValue;
+				potVar->prevPotValue = potVar->potValue;
 				potVar->potValue = potValue;
 				if (potVar->value) {
 					potVar->prevValue = *potVar->value;
 					*potVar->value = value;
 				}
-				potVar->changed = true;
 				potVar->forceRead = false;
 				PF(DBG_POTS, "New value for potVar %s: %d (%d > %d)\r\n", potVar->name, *potVar->value, diff, potVar->margin);
-				//if (potVar->handle
+				if (potVar->cbPotVarChanged) {
+					potVar->cbPotVarChanged(potVar);
+				}
 			}
 		}
 
@@ -1334,65 +1331,52 @@ POT_VAR *getPotVar(const char *name)
 	return NULL;
 }
 
-void processPotVars()
+void cbPotVarChangedRate(POT_VAR *potVar)
 {
-	POT_VAR *potVar;
-	potVar = getPotVar("FREQ");
-	if (potVar->changed) {
-		uint freq = freqFromPotValue(potVar->potValue);
-		if (freq != g_sigState.freq) {
-			g_sigState.freq = freq;
-			potVar->display.prevValue = potVar->display.value;
-			potVar->display.value = freq;
-			g_genSigDma->Stop();
-			g_genSigDma->SetWaveForm(g_sigState.waveform, g_sigState.freq, NULL);
-			g_genSigDma->Start();
-			drawVar(&potVar->display);
+	// Get us/div
+	uint usecPerDiv = usecPerDivFromPotValue(potVar->potValue);
+	// Convert it to frequency
+	uint scopeRate = VGRID_INTERVAL * 1000000 / usecPerDiv;
+	if (scopeRate != g_scopeState.sampleRate) {
+		g_scopeState.sampleRate = scopeRate;
+		potVar->display.prevValue = potVar->display.value;
+		potVar->display.value = usecPerDiv;
+		drawVarRate(&potVar->display);
+		// If we go from slow to fast mode, we need to restart AdcDma
+		if ( (g_drawState.drawMode == DRAW_MODE_SLOW) && (scopeRate >= ADC_SAMPLE_RATE_LOW_LIMIT) ) {
+			drawEraseSamples(false, true);
+			drawTriggerArrow(getPotVar("TRIG"), false);
+			drawGrid(0, TFT_WIDTH);
+			g_adcDma->Stop();
+			g_drawState.bFinished = true;
 		}
-		potVar->changed = false;
+		g_adcDma->SetSampleRate(g_scopeState.sampleRate);
 	}
-	potVar = getPotVar("RATE");
-	if (potVar->changed) {
-		// Get us/div
-		uint usecPerDiv = usecPerDivFromPotValue(potVar->potValue);
-		// Convert it to frequency
-		uint scopeRate = VGRID_INTERVAL * 1000000 / usecPerDiv;
-		if (scopeRate != g_scopeState.sampleRate) {
-			g_scopeState.sampleRate = scopeRate;
-			potVar->display.prevValue = potVar->display.value;
-			potVar->display.value = usecPerDiv;
-			drawVarRate(&potVar->display);
-			// If we go from slow to fast mode, we need to restart AdcDma
-			if ( (g_drawState.drawMode == DRAW_MODE_SLOW) && (scopeRate >= ADC_SAMPLE_RATE_LOW_LIMIT) ) {
-				drawEraseSamples(false, true);
-				drawTriggerArrow(getPotVar("TRIG"));
-				drawGrid(0, TFT_WIDTH);
-				g_adcDma->Stop();
-				g_drawState.bFinished = true;
-			}
-			g_adcDma->SetSampleRate(g_scopeState.sampleRate);
-		}
-		potVar->changed = false;
+}
+
+void cbPotVarChangedFreq(POT_VAR *potVar)
+{
+	uint freq = freqFromPotValue(potVar->potValue);
+	if (freq != g_sigState.freq) {
+		g_sigState.freq = freq;
+		potVar->display.prevValue = potVar->display.value;
+		potVar->display.value = freq;
+		g_genSigDma->Stop();
+		g_genSigDma->SetWaveForm(g_sigState.waveform, g_sigState.freq, NULL);
+		g_genSigDma->Start();
+		drawVar(&potVar->display);
 	}
-	potVar = getPotVar("TRIG");
-	if (potVar->changed) {
-		drawTriggerArrow(potVar);
-		drawGrid(0, TFT_WIDTH);
-		// Force drawn samples to 0 to redraw all
-		g_drawState.drawnFrames = 0;
-		drawEraseSamples(true, false);
-		uint timeout = computeTimeout();
-		g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, timeout);
-		potVar->changed = false;
-	}
-	potVar = getPotVar("GAI1");
-	if (potVar->changed) {
-		/*
-		uint gain = gainFromPotValue(potVar->potValue);
-		g_adcDma->SetChannelGain(SCOPE_CHANNEL_1, gain);
-		*/
-		potVar->changed = false;
-	}
+}
+
+void cbPotVarChangedTrig(POT_VAR *potVar)
+{
+	drawTriggerArrow(potVar, true);
+	drawGrid(0, TFT_WIDTH);
+	// Force drawn samples to 0 to redraw all
+	g_drawState.drawnFrames = 0;
+	drawEraseSamples(true, false);
+	uint timeout = computeTimeout();
+	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, timeout);
 }
 
 void loop()
@@ -1407,7 +1391,7 @@ void loop()
 				 (g_drawState.drawMode == DRAW_MODE_SLOW && g_drawState.mappedFrames > 0) ) {
 				drawEraseSamples(false, true);
 				drawGrid(0, TFT_WIDTH);
-				drawTriggerArrow(getPotVar("TRIG"));
+				drawTriggerArrow(getPotVar("TRIG"), false);
 				g_drawState.bNeedsErase = false;
 			}
 		}
@@ -1417,13 +1401,8 @@ void loop()
 			drawEraseSamples(true, true);
 		}
 		else {
-			int prevDrawnFrames = g_drawState.drawnFrames;
+			//int prevDrawnFrames = g_drawState.drawnFrames;
 			drawEraseSamples(true, false);
-			// We need to redraw arrow after first samples, or the trigger arrow might be deleted
-			if (prevDrawnFrames != g_drawState.drawnFrames && g_drawState.drawnFrames <= TRIGGER_ARROW_LEN) {
-				POT_VAR *potVar = getPotVar("TRIG");
-				//drawTriggerArrow(potVar);
-			}
 		}
 
 		if (g_drawState.drawnFrames >= TFT_WIDTH - 1) {
@@ -1434,9 +1413,6 @@ void loop()
 		if (g_drawState.drawMode == DRAW_MODE_FAST) {
 			updatePotsVars(NULL);
 		}
-
-		// Process SR, freq and trigger pot values
-		processPotVars();
 
 		// Update trigger status
 		drawTriggerStatus();
@@ -1475,8 +1451,7 @@ void loop()
 
 		// In slow mode, this will be done when we get first samples
 		if (g_drawState.drawMode == DRAW_MODE_FAST) {
-			drawTriggerArrow(getPotVar("TRIG"));
-			//drawGrid(0, TFT_WIDTH);
+			drawTriggerArrow(getPotVar("TRIG"), true);
 		}
 
 		computeFrameRate();
