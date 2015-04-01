@@ -272,6 +272,48 @@ bool AdcDma::SetSampleRate(int sampleRate)
 	return configureTimer();
 }
 
+bool AdcDma::SetChannelGain(int adcChannel, int gain)
+{
+	if (gain < 1 || gain > 4)
+		return false;
+
+	if (adcChannel < 0 || adcChannel > ADC_DMA_MAX_ADC_CHANNEL)
+		return false;
+
+	if (gain == 4)
+		gain = 3;
+
+	uint cgr = ADC->ADC_CGR;
+	cgr &= ~(0x3 << (adcChannel*2) );
+	cgr |= (gain << (adcChannel*2) );
+
+	Serial.print("Writting cgr :");
+	Serial.println(cgr);
+
+	ADC->ADC_CGR = cgr;
+	return true;
+}
+
+int AdcDma::GetChannelGain(int adcChannel)
+{
+	uint cgr;
+	uint gain;
+
+	if (adcChannel < 0 || adcChannel > ADC_DMA_MAX_ADC_CHANNEL)
+		return -1;
+
+	cgr = ADC->ADC_CGR;
+
+	Serial.print("Got cgr :");
+	Serial.println(cgr);
+
+	gain = ((cgr & 0x3) >> adcChannel*2);
+	if (gain == 3)
+		gain = 4;
+
+	return gain;
+}
+
 AdcDma::CaptureState AdcDma::GetCaptureState()
 {
 	return m_captureState;
@@ -493,13 +535,17 @@ bool AdcDma::configureAdc(bool bSoftwareTrigger)
 			ADC_MR_PRESCAL(0)			|	// ADCClock = MCLK / (2)
 			ADC_MR_STARTUP_SUT64		|	// Startup Time (cf note above)
 			ADC_MR_SETTLING_AST3		|	// We use same parameters for all channels, use minimal value
-			ADC_MR_ANACH_NONE			|	// Use Diff0, Gain0 and Off0 for all channels
+			ADC_MR_ANACH_ALLOWED		|	// Use different gain, offset and mode for all channels
 			ADC_MR_TRACKTIM(0)			|	// Minimal value for tracking time
 			ADC_MR_TRANSFER(0)			|	// Minimal value for transfer period
 			ADC_MR_USEQ_NUM_ORDER;			// Don't use sequencer mode
 
 	// Update timer channel used for trigger
 	updateAdcTimerChannel();
+
+	// All channels in single ended mode
+	// Center before scaling
+	ADC->ADC_COR = 0x0000FFFF;
 
 	return true;
 }

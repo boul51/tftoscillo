@@ -101,6 +101,8 @@ public :
 
 	uint32_t SetBufferDuration(uint32_t durationMs);
 	void SetRxHandler(RxCallback rxHandler);
+	bool SetChannelGain(int adcChannel, int gain);
+	int GetChannelGain(int adcChannel);
 private :
 
 	RxCallback m_rxHandler;
