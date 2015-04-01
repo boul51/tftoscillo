@@ -87,6 +87,7 @@ typedef struct _VAR_DISPLAY {
 typedef struct _POT_VAR {
 	uint adcChannel;
 	uint potValue;
+	uint prevPotValue;
 	uint *minValue;
 	uint *maxValue;
 	uint *value;

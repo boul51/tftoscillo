@@ -6,6 +6,7 @@
 
 #include <SPI.h>
 #include <TFT.h>  // Arduino LCD library
+#include <avr/dtostrf.h>
 
 #include "tftoscillo.h"
 
@@ -23,20 +24,26 @@
 #define TFT_CS_PIN   13		// Chip select pin
 
 // Pot and scope inputs
-#define SCOPE_CHANNEL_1			6
-#define SCOPE_CHANNEL_2			7
+#define SCOPE_CHANNEL_1			7
+#define SCOPE_CHANNEL_2			6
 #define SCOPE_CHANNEL_3			5
 #define SCOPE_CHANNEL_4			4
 #define FREQ_CHANNEL			3
 #define ADC_RATE_CHANNEL		2
 #define TRIGGER_CHANNEL			1
+#define GAIN_CHANNEL_1			0
+
+// Resistors definitions
+// Input is made of a voltage divider (2 resistors)
+#define RES_SIG_INPUT	1000000	// Signal to input
+#define RES_GND_INPUT	47000	// Ground to input
 
 // Pot definitions
 
 #define POT_ANALOG_MAX_VAL (988*ANALOG_MAX_VAL/1000)	// This is used for pot input. Max value read is not 4096 but around 4050 ie 98.8%
 #define POT_ANALOG_DIFF				20					// Min difference between two pot value to consider is was moved
 
-#define TRIGGER_TIMEOUT				100
+#define TRIGGER_TIMEOUT				1000
 
 // Trigger definitions
 #define TRIGGER_STATUS_DISABLED		0
@@ -127,6 +134,36 @@ uint8_t g_scopeColors[][3] = {
 	{255,  51, 204},
 };
 
+// DacDma available frequencies
+uint32_t g_dacFreqs[] = {
+	1, 2, 5,
+	10, 25, 50,
+	50, 100, 250,
+	500, 1000, 2500,
+	5000, 10000, 25000,
+	50000, 100000,
+};
+
+// Scope available rates, in µs/div
+uint32_t g_scopeRates[] = {
+	28,
+	50, 100, 250,				// 50-250 µs
+	500, 1000, 2500,			// 0.5-2.5 ms
+	5000, 10000, 25000,			// 5-25 ms
+	50000, 100000, 250000,		// 50-250 ms
+	500000, 1000000, 2500000,	// 0.5-2.5 s
+};
+
+// Gain available values
+uint32_t g_scopeGains[] = {
+	1,
+	2,
+	5,
+	10,
+	50,
+	100,
+};
+
 SCOPE_STATE g_scopeState =
 {
 	.sampleRate		= 100,
@@ -170,6 +207,7 @@ POT_VAR g_potVars[] =
 	{
 		.adcChannel	= TRIGGER_CHANNEL,
 		.potValue	= 0,
+		.prevPotValue = 0,
 		.minValue	= &g_scopeState.minTriggerVal,
 		.maxValue	= &g_scopeState.maxTriggerVal,
 		.value		= &g_scopeState.triggerVal,
@@ -183,11 +221,28 @@ POT_VAR g_potVars[] =
 		}
 	},
 	{
+		.adcChannel	= GAIN_CHANNEL_1,
+		.potValue	= 0,
+		.prevPotValue = 0,
+		.minValue	= NULL,
+		.maxValue	= NULL,
+		.value		= NULL,
+		.prevValue	= 0,
+		.margin		= POT_ANALOG_DIFF,
+		.changed	= false,
+		.forceRead	= true,
+		.name		= "GAI1",
+		.bHasVarDisplay = false,
+		.display	= {
+		}
+	},
+	{
 		.adcChannel	= ADC_RATE_CHANNEL,
 		.potValue	= 0,
+		.prevPotValue = 0,
 		.minValue	= &g_scopeState.minSampleRate,
 		.maxValue	= &g_scopeState.maxSampleRate,
-		.value		= &g_scopeState.sampleRate,
+		.value		= NULL,
 		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
 		.changed	= false,
@@ -208,9 +263,10 @@ POT_VAR g_potVars[] =
 	{
 		.adcChannel	= FREQ_CHANNEL,
 		.potValue	= (uint)-1,
+		.prevPotValue = 0,
 		.minValue	= &g_sigState.minFreq,
 		.maxValue	= &g_sigState.maxFreq,
-		.value		= &g_sigState.freq,
+		.value		= NULL,
 		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
 		.changed	= false,
@@ -227,7 +283,7 @@ POT_VAR g_potVars[] =
 			.y				= TEXT_UP_Y_OFFSET,
 			.cbDrawVar      = drawVar,
 		}
-	}
+	},
 };
 
 VAR_DISPLAY g_fpsVarDisplay =
@@ -273,6 +329,7 @@ void setup() {
 	SCmd.addCommand("form", formHandler);
 	SCmd.addCommand("ch", channelCountHandler);
 	SCmd.addCommand("bl", blHandler);
+	SCmd.addCommand("gain", channelGainHandler);
 	SCmd.addDefaultHandler(defaultHandler);
 
 	// Initialize LCD
@@ -331,7 +388,7 @@ void channelCountHandler()
 
 	chCnt = atoi(strCh);
 
-	if (chCnt <= 0 || chCnt > DIMOF(g_scopeChannels)) {
+	if (chCnt <= 0 || chCnt > (int)DIMOF(g_scopeChannels)) {
 		Serial.print("Invalid channels count ");
 		Serial.println(chCnt);
 		return;
@@ -339,6 +396,43 @@ void channelCountHandler()
 
 	g_scopeState.newScopeChannelsCount = chCnt;
 	g_scopeState.bScopeChannelsCountChanged = true;
+}
+
+void channelGainHandler()
+{
+	char * strCh, *strGain;
+	int ch, gain;
+
+	strCh = SCmd.next();
+
+	if (strCh == NULL) {
+		Serial.println("Missing channel argument for gain command");
+		return;
+	}
+
+	ch = atoi(strCh);
+	if (ch < 0 || ch > ADC_DMA_MAX_ADC_CHANNEL) {
+		Serial.println("Invalid channel");
+		return;
+	}
+
+	strGain = SCmd.next();
+
+	if (strGain == NULL) {
+		Serial.print("Gain for channel ");
+		Serial.print(ch);
+		Serial.print(": ");
+		Serial.println(g_adcDma->GetChannelGain(ch));
+		return;
+	}
+
+	gain = atoi(strGain);
+	if (gain < 1 || gain > 4) {
+		Serial.println("Invalid gain (must be in range 1-4)");
+		return;
+	}
+
+	g_adcDma->SetChannelGain(ch, gain);
 }
 
 void freqRangeHandler()
@@ -542,9 +636,16 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 {
 	uint16_t rawSample;
 	uint16_t sample;
+	int scaledSample;
 	uint16_t mappedVal;
 	int channel;
 	int channelsCount = g_adcDma->GetAdcChannelsCount();
+	int gains[DIMOF(g_scopeChannels)] = {1};
+
+	gains[0] = gainFromPotValue(getPotVar("GAI1")->potValue);
+
+	Serial.print("Got gain for channel 1: ");
+	Serial.println(gains[0]);
 
 	CHANNEL_DESC *channelDesc = &g_channelDescs[0];
 
@@ -563,6 +664,16 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 			channel = g_adcDma->channel(rawSample);
 
 			PF(false, "Got channel %d, sample %d\r\n", channel, sample);
+
+			uint gain = gains[iChannel];
+			if (gain != 1) {
+				scaledSample = sample * gain - (gain - 1) * SAMPLE_MAX_VAL / 2;
+				if (scaledSample < 0)
+					scaledSample = 0;
+				if (scaledSample > SAMPLE_MAX_VAL)
+					scaledSample = SAMPLE_MAX_VAL;
+				sample = scaledSample;
+			}
 
 			channelDesc = getChannelDesc(channel);
 
@@ -678,19 +789,30 @@ void drawVarRate(VAR_DISPLAY *var)
 		if (i == 0 && !var->bNeedsErase)
 			continue;
 
-		String s;
-		s = String(var->prefix);
+		const char * suffix;
+		float dispValue;
 		if (i == 0) {
 			// erase prev value
-			s += String(var->prevValue);
+			suffix = sampleRateSuffix(var->prevValue, &dispValue);
 			TFTscreen.stroke(BG_COLOR);
 		}
 		else {
 			// draw new value
-			s += String(var->value);
+			suffix = sampleRateSuffix(var->value, &dispValue);
 			TFTscreen.stroke(TEXT_COLOR);
 		}
-		s += String(var->suffix);
+
+		char strValue[10];
+		dtostrf(dispValue, 0, 1, strValue);
+		// dirty hack: remove trailing .0 if integer !
+		if (strValue[strlen(strValue) - 1] == '0') {
+			strValue[strlen(strValue) - 2] = 0;
+		}
+
+		String s;
+		s = String(var->prefix);
+		s += String(strValue);
+		s += String(suffix);
 		s.toCharArray(textBuf, 15);
 		TFTscreen.text(textBuf, var->x, var->y);
 	}
@@ -1088,15 +1210,23 @@ void updatePotsVars(uint16_t *buffer)
 		if (potVar && !potVar->changed) {
 			diff = ABS_DIFF(potVar->potValue, potValue);
 			if (diff > potVar->margin || potVar->forceRead) {
-				value = map(potValue / 4, 0, POT_ANALOG_MAX_VAL / 4, *potVar->minValue, *potVar->maxValue);
 				// Pot val might be out of bounds. In this case, crop value
-				if (value < *potVar->minValue)
-					value = *potVar->minValue;
-				if (value > *potVar->maxValue)
-					value = *potVar->maxValue;
+				if (potVar->minValue && potVar->maxValue) {
+					value = map(potValue / 4, 0, POT_ANALOG_MAX_VAL / 4, *potVar->minValue, *potVar->maxValue);
+					if (value < *potVar->minValue)
+						value = *potVar->minValue;
+					if (value > *potVar->maxValue)
+						value = *potVar->maxValue;
+				}
+				else {
+					value = potValue;
+				}
+				potVar->prevPotValue = potValue;
 				potVar->potValue = potValue;
-				potVar->prevValue = *potVar->value;
-				*potVar->value = value;
+				if (potVar->value) {
+					potVar->prevValue = *potVar->value;
+					*potVar->value = value;
+				}
 				potVar->changed = true;
 				potVar->forceRead = false;
 				PF(DBG_POTS, "New value for potVar %s: %d (%d > %d)\r\n", potVar->name, *potVar->value, diff, potVar->margin);
@@ -1177,7 +1307,60 @@ void setupAdcDma()
 
 	g_adcDma->SetAdcChannels(channels, channelsCount);
 	g_adcDma->SetBuffers(bufcount, buflen);
-	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, 1000);
+	uint timeout = computeTimeout();
+	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, timeout);
+}
+
+uint usecPerDivFromPotValue(uint potValue)
+{
+	int idx = potValue * DIMOF(g_scopeRates) / ANALOG_MAX_VAL;
+	idx = DIMOF(g_scopeRates) - idx - 1;
+	uint32_t rate = g_scopeRates[idx];
+
+	return rate;
+}
+
+uint freqFromPotValue(uint potValue)
+{
+	int idx = potValue * DIMOF(g_dacFreqs) / ANALOG_MAX_VAL;
+	return g_dacFreqs[idx];
+}
+
+uint gainFromPotValue(uint potValue)
+{
+	int idx = potValue * DIMOF(g_scopeGains) / ANALOG_MAX_VAL;
+	return g_scopeGains[idx];
+}
+
+uint computeTimeout()
+{
+	uint timeout = 4 * TFT_WIDTH * 1000 / g_scopeState.sampleRate;
+	if (timeout > 1000)
+		timeout = 1000;
+	else if (timeout == 0)
+		timeout = 1;
+
+	return timeout;
+}
+
+const char *sampleRateSuffix(uint rate, float *dispValue)
+{
+	const char *suffix;
+
+	if (rate >= 1000000) {
+		*dispValue = (float)rate / 1000000;
+		suffix = "s/div";
+	}
+	else if (rate >= 1000) {
+		*dispValue = (float)rate / 1000;
+		suffix = "ms/div";
+	}
+	else {
+		*dispValue = (float)rate;
+		suffix = "us/div";
+	}
+
+	return suffix;
 }
 
 POT_VAR *getPotVar(const char *name)
@@ -1195,23 +1378,39 @@ void processPotVars()
 	POT_VAR *potVar;
 	potVar = getPotVar("FREQ");
 	if (potVar->changed) {
-		g_genSigDma->Stop();
-		g_genSigDma->SetWaveForm(g_sigState.waveform, g_sigState.freq, NULL);
-		g_genSigDma->Start();
-		drawPotVar(potVar);
+		uint freq = freqFromPotValue(potVar->potValue);
+		if (freq != g_sigState.freq) {
+			g_sigState.freq = freq;
+			potVar->display.prevValue = potVar->display.value;
+			potVar->display.value = freq;
+			g_genSigDma->Stop();
+			g_genSigDma->SetWaveForm(g_sigState.waveform, g_sigState.freq, NULL);
+			g_genSigDma->Start();
+			drawVar(&potVar->display);
+		}
 		potVar->changed = false;
 	}
 	potVar = getPotVar("RATE");
 	if (potVar->changed) {
-		// Compute scope rate in s/div
-
-		drawPotVar(potVar);
-		// If we go from slow to fast mode, we need to restart AdcDma
-		if ( (g_drawState.drawMode == DRAW_MODE_SLOW) && (*potVar->value >= ADC_SAMPLE_RATE_LOW_LIMIT) ) {
-			g_adcDma->Stop();
-			g_drawState.bFinished = true;
+		// Get us/div
+		uint usecPerDiv = usecPerDivFromPotValue(potVar->potValue);
+		// Convert it to frequency
+		uint scopeRate = VGRID_INTERVAL * 1000000 / usecPerDiv;
+		if (scopeRate != g_scopeState.sampleRate) {
+			g_scopeState.sampleRate = scopeRate;
+			potVar->display.prevValue = potVar->display.value;
+			potVar->display.value = usecPerDiv;
+			drawVarRate(&potVar->display);
+			// If we go from slow to fast mode, we need to restart AdcDma
+			if ( (g_drawState.drawMode == DRAW_MODE_SLOW) && (scopeRate >= ADC_SAMPLE_RATE_LOW_LIMIT) ) {
+				drawEraseSamples(false, true);
+				drawTriggerArrow(getPotVar("TRIG"));
+				drawGrid(0, TFT_WIDTH);
+				g_adcDma->Stop();
+				g_drawState.bFinished = true;
+			}
+			g_adcDma->SetSampleRate(g_scopeState.sampleRate);
 		}
-		g_adcDma->SetSampleRate(g_scopeState.sampleRate);
 		potVar->changed = false;
 	}
 	potVar = getPotVar("TRIG");
@@ -1221,7 +1420,16 @@ void processPotVars()
 		// Force drawn samples to 0 to redraw all
 		g_drawState.drawnFrames = 0;
 		drawEraseSamples(true, false);
-		g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, 1000);
+		uint timeout = computeTimeout();
+		g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, timeout);
+		potVar->changed = false;
+	}
+	potVar = getPotVar("GAI1");
+	if (potVar->changed) {
+		/*
+		uint gain = gainFromPotValue(potVar->potValue);
+		g_adcDma->SetChannelGain(SCOPE_CHANNEL_1, gain);
+		*/
 		potVar->changed = false;
 	}
 }
