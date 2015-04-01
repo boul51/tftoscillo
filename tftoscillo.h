@@ -48,8 +48,6 @@ typedef struct _DRAW_STATE {
 
 typedef struct _SCOPE_STATE {
 	uint sampleRate;
-	uint minSampleRate;
-	uint maxSampleRate;
 	uint triggerChannel;
 	uint triggerVal;
 	uint minTriggerVal;
@@ -72,6 +70,9 @@ typedef struct _SIG_STATE {
 
 struct _VAR_DISPLAY;
 typedef void (*cbDrawVar_t)(struct _VAR_DISPLAY *);
+
+struct _POT_VAR;
+typedef void (*cbPotVarChanged_t)(struct _POT_VAR *);
 
 typedef struct _VAR_DISPLAY {
 	bool bNeedsErase;
@@ -96,6 +97,7 @@ typedef struct _POT_VAR {
 	bool changed;
 	bool forceRead;
 	char name[5];
+	cbPotVarChanged_t cbPotVarChanged;
 	bool bHasVarDisplay;
 	VAR_DISPLAY display;
 }POT_VAR;

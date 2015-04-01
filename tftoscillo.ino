@@ -167,8 +167,6 @@ uint32_t g_scopeGains[] = {
 SCOPE_STATE g_scopeState =
 {
 	.sampleRate		= 100,
-	.minSampleRate	= ADC_MIN_SAMPLE_RATE,
-	.maxSampleRate	= ADC_MAX_SAMPLE_RATE,
 	.triggerChannel	= SCOPE_CHANNEL_1,
 	.triggerVal		= 2000,
 	.minTriggerVal	= 0,
@@ -216,6 +214,7 @@ POT_VAR g_potVars[] =
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "TRIG",
+		.cbPotVarChanged = NULL,
 		.bHasVarDisplay = false,
 		.display	= {
 		}
@@ -232,6 +231,7 @@ POT_VAR g_potVars[] =
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "GAI1",
+		.cbPotVarChanged = NULL,
 		.bHasVarDisplay = false,
 		.display	= {
 		}
@@ -240,14 +240,15 @@ POT_VAR g_potVars[] =
 		.adcChannel	= ADC_RATE_CHANNEL,
 		.potValue	= 0,
 		.prevPotValue = 0,
-		.minValue	= &g_scopeState.minSampleRate,
-		.maxValue	= &g_scopeState.maxSampleRate,
+		.minValue	= NULL,
+		.maxValue	= NULL,
 		.value		= NULL,
 		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "RATE",
+		.cbPotVarChanged = NULL,
 		.bHasVarDisplay = true,
 		.display	= {
 			.bNeedsErase	= false,
@@ -272,6 +273,7 @@ POT_VAR g_potVars[] =
 		.changed	= false,
 		.forceRead	= true,
 		.name		= "FREQ",
+		.cbPotVarChanged = NULL,
 		.bHasVarDisplay = true,
 		.display	= {
 			.bNeedsErase	= false,
@@ -324,7 +326,6 @@ void setup() {
 
 	SCmd.addCommand("tgmode", triggerModeHandler);
 	SCmd.addCommand("fr", freqRangeHandler);
-	SCmd.addCommand("sr", sampleRateRangeHandler);
 	SCmd.addCommand("zoom", zoomHandler);
 	SCmd.addCommand("form", formHandler);
 	SCmd.addCommand("ch", channelCountHandler);
@@ -471,47 +472,6 @@ void freqRangeHandler()
 	g_sigState.maxFreq = rangeEnd;
 
 	POT_VAR *potVar = getPotVar("FREQ");
-	potVar->forceRead = true;
-
-	return;
-}
-
-void sampleRateRangeHandler()
-{
-	// Expecting 2 parameters
-	char * strRangeStart;
-	char * strRangeEnd;
-
-	int rangeStart;
-	int rangeEnd;
-
-	strRangeStart = SCmd.next();
-	if (strRangeStart == NULL) {
-		Serial.print(g_scopeState.sampleRate);
-		Serial.print(" (");
-		Serial.print(g_scopeState.minSampleRate);
-		Serial.print(" - ");
-		Serial.print(g_scopeState.maxSampleRate);
-		Serial.println(")");
-		return;
-	}
-
-	strRangeEnd = SCmd.next();
-	if (strRangeEnd == NULL) {
-		strRangeEnd = strRangeStart;
-	}
-
-	rangeStart = atol(strRangeStart);
-	rangeEnd   = atol(strRangeEnd);
-
-	if (rangeEnd < rangeStart) {
-		return;
-	}
-
-	g_scopeState.minSampleRate = rangeStart;
-	g_scopeState.maxSampleRate = rangeEnd;
-
-	POT_VAR *potVar = getPotVar("RATE");
 	potVar->forceRead = true;
 
 	return;
@@ -1230,6 +1190,7 @@ void updatePotsVars(uint16_t *buffer)
 				potVar->changed = true;
 				potVar->forceRead = false;
 				PF(DBG_POTS, "New value for potVar %s: %d (%d > %d)\r\n", potVar->name, *potVar->value, diff, potVar->margin);
+				//if (potVar->handle
 			}
 		}
 
