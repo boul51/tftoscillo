@@ -35,8 +35,8 @@
 
 // Resistors definitions
 // Input is made of a voltage divider (2 resistors)
-#define RES_SIG_INPUT	1000000	// Signal to input
-#define RES_GND_INPUT	47000	// Ground to input
+#define RES_SIG_INPUT	967000	// Signal to input
+#define RES_GND_INPUT	33000	// Ground to input
 
 // Pot definitions
 
@@ -160,6 +160,7 @@ uint32_t g_scopeGains[] = {
 	2,
 	5,
 	10,
+	20,
 	50,
 	100,
 };
@@ -228,10 +229,20 @@ POT_VAR g_potVars[] =
 		.prevValue	= 0,
 		.margin		= POT_ANALOG_DIFF,
 		.forceRead	= true,
-		.name		= "GAIN1",
-		.cbPotVarChanged = NULL,
+		.name		= "GAIN0",
+		.cbPotVarChanged = cbPotVarChangedGain,
 		.bHasVarDisplay = false,
 		.display	= {
+			.bNeedsErase	= false,
+			.prefix			= "",
+			.suffix			= "", // Will be set later
+			.prevSuffix		= "", // Will be set later
+			.value			= 0,
+			.prevValue		= 0,
+			.valuef			= 0.,
+			.prevValuef		= 0.,
+			.x				= 10,
+			.y				= TEXT_DOWN_Y_OFFSET,
 		}
 	},
 	{
@@ -250,13 +261,14 @@ POT_VAR g_potVars[] =
 		.display	= {
 			.bNeedsErase	= false,
 			.prefix			= "SR:",
-			.suffix			= "Hz",
-			.prevSuffix		= "",
+			.suffix			= "", // Will be set later
+			.prevSuffix		= "", // Will be set later
 			.value			= 0,
 			.prevValue		= 0,
+			.valuef			= 0.,
+			.prevValuef		= 0.,
 			.x				= TFT_WIDTH / 2,
 			.y				= TEXT_UP_Y_OFFSET,
-			.cbDrawVar      = drawVarRate,
 		}
 	},
 	{
@@ -276,12 +288,13 @@ POT_VAR g_potVars[] =
 			.bNeedsErase	= false,
 			.prefix			= "Fq:",
 			.suffix			= "Hz",
-			.prevSuffix		= "",
+			.prevSuffix		= "Hz",
 			.value			= 0,
 			.prevValue		= 0,
+			.valuef			= 0.,
+			.prevValuef		= 0.,
 			.x				= 10,
 			.y				= TEXT_UP_Y_OFFSET,
-			.cbDrawVar      = drawVar,
 		}
 	},
 };
@@ -290,13 +303,14 @@ VAR_DISPLAY g_fpsVarDisplay =
 {
 	.bNeedsErase	= false,
 	.prefix			= "Fps:",
-	.suffix			= "",
-	.prevSuffix		= "",
+	.suffix			= "", // None
+	.prevSuffix		= "", // None
 	.value			= 0,
 	.prevValue		= 0,
-	.x				= 10,
+	.valuef			= 0.,
+	.prevValuef		= 0.,
+	.x				= TFT_WIDTH / 2 + 20,
 	.y				= TEXT_DOWN_Y_OFFSET,
-	.cbDrawVar      = drawVar,
 };
 
 void setup() {
@@ -309,6 +323,7 @@ void setup() {
 	for (uint i = 0; i < DIMOF(g_scopeChannels); i++) {
 		g_channelDescs[i].channel = g_scopeChannels[i];
 		g_channelDescs[i].bufSize = TFT_WIDTH;
+		g_channelDescs[i].swGain = 1.;
 
 		g_channelDescs[i].r = g_scopeColors[i][0];
 		g_channelDescs[i].g = g_scopeColors[i][1];
@@ -599,11 +614,7 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 	uint16_t mappedVal;
 	int channel;
 	int channelsCount = g_adcDma->GetAdcChannelsCount();
-	int gains[DIMOF(g_scopeChannels)] = {1};
-
-	gains[0] = gainFromPotValue(getPotVar("GAIN1")->potValue);
-
-	CHANNEL_DESC *channelDesc = &g_channelDescs[0];
+	CHANNEL_DESC *channelDesc;
 
 	for (int iFrame = 0; iFrame < framesCount; iFrame++) {
 
@@ -621,17 +632,18 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 
 			PF(false, "Got channel %d, sample %d\r\n", channel, sample);
 
-			uint gain = gains[iChannel];
-			if (gain != 1) {
-				scaledSample = sample * gain - (gain - 1) * SAMPLE_MAX_VAL / 2;
+			channelDesc = getChannelDesc(channel);
+
+			float gain = channelDesc->swGain;
+			if (gain != 1.) {
+				scaledSample = (uint)((float)sample * gain - (gain - 1.) *
+						(float)SAMPLE_MAX_VAL / 2.);
 				if (scaledSample < 0)
 					scaledSample = 0;
 				if (scaledSample > SAMPLE_MAX_VAL)
 					scaledSample = SAMPLE_MAX_VAL;
 				sample = scaledSample;
 			}
-
-			channelDesc = getChannelDesc(channel);
 
 			if (channelDesc) {
 				mappedVal = map(sample, 0, SAMPLE_MAX_VAL, g_maxY, g_minY);
@@ -696,16 +708,13 @@ void drawTriggerArrow(POT_VAR *potVar, bool potVarChanged)
 	}
 }
 
-void drawPotVar(POT_VAR *potVar)
-{
-	potVar->display.value = *potVar->value;
-	potVar->display.prevValue = potVar->prevValue;
-	potVar->display.cbDrawVar(&potVar->display);
-}
-
-void drawVar(VAR_DISPLAY *var)
+void drawVar(VAR_DISPLAY *var, VAR_TYPE type)
 {
 	char textBuf[40];
+	String sValue;
+	int value;
+	float valuef;
+	const char * suffix, *prefix;
 
 	for (int i = 0; i < 2; i++) {
 
@@ -713,61 +722,39 @@ void drawVar(VAR_DISPLAY *var)
 		if (i == 0 && !var->bNeedsErase)
 			continue;
 
-		String s;
-		s = String(var->prefix);
 		if (i == 0) {
 			// erase prev value
-			s += String(var->prevValue);
+			prefix = var->prefix;
+			suffix = var->prevSuffix;
 			TFTscreen.stroke(BG_COLOR);
+			value = var->prevValue;
+			valuef = var->prevValuef;
 		}
 		else {
 			// draw new value
-			s += String(var->value);
+			prefix = var->prefix;
+			suffix = var->suffix;
 			TFTscreen.stroke(TEXT_COLOR);
+			value = var->value;
+			valuef = var->valuef;
 		}
-		s += String(var->suffix);
-		s.toCharArray(textBuf, 15);
-		TFTscreen.text(textBuf, var->x, var->y);
-	}
 
-	var->bNeedsErase = true;
-}
-
-void drawVarRate(VAR_DISPLAY *var)
-{
-	char textBuf[40];
-
-	// Compute number of
-
-	for (int i = 0; i < 2; i++) {
-
-		// Don't erase if not needed
-		if (i == 0 && !var->bNeedsErase)
-			continue;
-
-		const char * suffix;
-		float dispValue;
-		if (i == 0) {
-			// erase prev value
-			suffix = sampleRateSuffix(var->prevValue, &dispValue);
-			TFTscreen.stroke(BG_COLOR);
+		if (type == VAR_TYPE_FLOAT) {
+			char strValue[10];
+			dtostrf(valuef, 0, 1, strValue);
+			// dirty hack: remove trailing .0 if integer !
+			if (strValue[strlen(strValue) - 1] == '0') {
+				strValue[strlen(strValue) - 2] = 0;
+			}
+			sValue = String(strValue);
 		}
 		else {
-			// draw new value
-			suffix = sampleRateSuffix(var->value, &dispValue);
-			TFTscreen.stroke(TEXT_COLOR);
-		}
-
-		char strValue[10];
-		dtostrf(dispValue, 0, 1, strValue);
-		// dirty hack: remove trailing .0 if integer !
-		if (strValue[strlen(strValue) - 1] == '0') {
-			strValue[strlen(strValue) - 2] = 0;
+			sValue = String(value);
 		}
 
 		String s;
-		s = String(var->prefix);
-		s += String(strValue);
+		s  = String(prefix);
+		s += String(sValue);
 		s += String(suffix);
 		s.toCharArray(textBuf, 15);
 		TFTscreen.text(textBuf, var->x, var->y);
@@ -1301,20 +1288,20 @@ uint computeTimeout()
 	return timeout;
 }
 
-const char *sampleRateSuffix(uint rate, float *dispValue)
+const char *sampleRateSuffix(uint usecPerDiv, float *dispValue)
 {
 	const char *suffix;
 
-	if (rate >= 1000000) {
-		*dispValue = (float)rate / 1000000;
+	if (usecPerDiv >= 1000000) {
+		*dispValue = (float)usecPerDiv / 1000000;
 		suffix = "s/div";
 	}
-	else if (rate >= 1000) {
-		*dispValue = (float)rate / 1000;
+	else if (usecPerDiv >= 1000) {
+		*dispValue = (float)usecPerDiv / 1000;
 		suffix = "ms/div";
 	}
 	else {
-		*dispValue = (float)rate;
+		*dispValue = (float)usecPerDiv;
 		suffix = "us/div";
 	}
 
@@ -1339,9 +1326,12 @@ void cbPotVarChangedRate(POT_VAR *potVar)
 	uint scopeRate = VGRID_INTERVAL * 1000000 / usecPerDiv;
 	if (scopeRate != g_scopeState.sampleRate) {
 		g_scopeState.sampleRate = scopeRate;
-		potVar->display.prevValue = potVar->display.value;
-		potVar->display.value = usecPerDiv;
-		drawVarRate(&potVar->display);
+		potVar->display.prevValuef = potVar->display.valuef;
+		potVar->display.prevSuffix = potVar->display.suffix;
+		potVar->display.suffix = sampleRateSuffix(usecPerDiv,
+												  &potVar->display.valuef);
+		drawVar(&potVar->display, VAR_TYPE_FLOAT);
+
 		// If we go from slow to fast mode, we need to restart AdcDma
 		if ( (g_drawState.drawMode == DRAW_MODE_SLOW) && (scopeRate >= ADC_SAMPLE_RATE_LOW_LIMIT) ) {
 			drawEraseSamples(false, true);
@@ -1364,7 +1354,7 @@ void cbPotVarChangedFreq(POT_VAR *potVar)
 		g_genSigDma->Stop();
 		g_genSigDma->SetWaveForm(g_sigState.waveform, g_sigState.freq, NULL);
 		g_genSigDma->Start();
-		drawVar(&potVar->display);
+		drawVar(&potVar->display, VAR_TYPE_INT);
 	}
 }
 
@@ -1377,6 +1367,45 @@ void cbPotVarChangedTrig(POT_VAR *potVar)
 	drawEraseSamples(true, false);
 	uint timeout = computeTimeout();
 	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, timeout);
+}
+
+void cbPotVarChangedGain(POT_VAR *potVar)
+{
+	CHANNEL_DESC *ch;
+	char c;
+	float res; // voltage resolution
+	uint gain;
+
+	// Get channel index from potVar name.
+	// We expect something like GAINX where X is the channel index
+	c = potVar->name[strlen(potVar->name) - 1];
+	ch = &g_channelDescs[c - '0'];
+
+	gain = gainFromPotValue(potVar->potValue);
+
+	if (gain >= 4) {
+		ch->hwGain = 4;
+	}
+	else if (gain >= 2) {
+		ch->hwGain = 2;
+	}
+	else {
+		ch->hwGain = 1;
+	}
+	ch->swGain = (float)gain / (float)ch->hwGain;
+	g_adcDma->SetChannelGain(ch->channel, ch->hwGain);
+
+	res = ((float)RES_SIG_INPUT + (float)(RES_GND_INPUT)) /
+			(float)RES_GND_INPUT;
+
+	// Compute V/div for display
+	res *= 3.3 * VGRID_INTERVAL / (float)(g_maxY - g_minY) / (float)gain;
+
+	potVar->display.prevValuef = potVar->display.valuef;
+	potVar->display.valuef = res;
+	potVar->display.suffix = "V/div";
+	potVar->display.prevSuffix = "V/div";
+	drawVar(&potVar->display, VAR_TYPE_FLOAT);
 }
 
 void loop()
@@ -1455,7 +1484,7 @@ void loop()
 		}
 
 		computeFrameRate();
-		drawVar(&g_fpsVarDisplay);
+		drawVar(&g_fpsVarDisplay, VAR_TYPE_INT);
 
 		setupAdcDma();
 

@@ -22,6 +22,9 @@
 // Channel descriptor
 typedef struct _CHANNEL_DESC {
 	int channel;
+	float totalGain;
+	float swGain;
+	uint  hwGain;
 	int bufSize;
 	uint16_t *curSamples;
 	uint16_t *oldSamples;
@@ -68,8 +71,10 @@ typedef struct _SIG_STATE {
 	GenSigDma::WaveForm waveform;
 }SIG_STATE;
 
-struct _VAR_DISPLAY;
-typedef void (*cbDrawVar_t)(struct _VAR_DISPLAY *);
+typedef enum _VAR_TYPE {
+	VAR_TYPE_INT = 1,
+	VAR_TYPE_FLOAT = 2,
+}VAR_TYPE;
 
 struct _POT_VAR;
 typedef void (*cbPotVarChanged_t)(struct _POT_VAR *);
@@ -81,9 +86,10 @@ typedef struct _VAR_DISPLAY {
 	const char *prevSuffix;
 	uint value;
 	uint prevValue;
+	float valuef;
+	float prevValuef;
 	int x;
 	int y;
-	cbDrawVar_t cbDrawVar;
 }VAR_DISPLAY;
 
 typedef struct _POT_VAR {
