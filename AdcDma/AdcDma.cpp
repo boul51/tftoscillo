@@ -238,6 +238,7 @@ bool AdcDma::SetAdcChannels(uint16_t *adcChannels, int adcChannelsCount)
 
 	for (int i = 0; i < adcChannelsCount; i++) {
 		m_adcChannels[i] = adcChannels[i];
+		//SetChannelGain(m_adcChannels[i], 1);
 	}
 
 	m_adcChannelsCount = adcChannelsCount;
@@ -287,9 +288,6 @@ bool AdcDma::SetChannelGain(int adcChannel, int gain)
 	cgr &= ~(0x3 << (adcChannel*2) );
 	cgr |= (gain << (adcChannel*2) );
 
-	Serial.print("Writting cgr :");
-	Serial.println(cgr);
-
 	ADC->ADC_CGR = cgr;
 	return true;
 }
@@ -303,9 +301,6 @@ int AdcDma::GetChannelGain(int adcChannel)
 		return -1;
 
 	cgr = ADC->ADC_CGR;
-
-	Serial.print("Got cgr :");
-	Serial.println(cgr);
 
 	gain = ((cgr & 0x3) >> adcChannel*2);
 	if (gain == 3)
