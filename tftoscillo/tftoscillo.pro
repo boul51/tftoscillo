@@ -4,11 +4,6 @@ CONFIG -= app_bundle
 CONFIG -= qt
 
 include(prefs.mk)
-include(deployment.pri)
-
-qtcAddDeployment()
-
-# Obtained by running qmake -pro in arduino folder..
 
 INCLUDEPATH += ../GenSigDma \
                ../AdcDma \

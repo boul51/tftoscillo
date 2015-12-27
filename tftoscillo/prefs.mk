@@ -1,22 +1,13 @@
 #!/bin/sh
 
-# Use arduino from built repo
-#ARDUINO_EXE=/usr/src/Arduino/build/linux/work/arduino
-
-# Use arduino from downloaded package
-#ARDUINO_EXE=~/src/arduino-1.6.7/arduino
-
-# Use this to include arduino source libraries into qtcreator project file
-#ARDUINO_SRC_DIR=/usr/src/Arduino
-
-# Directory for Arduino user libraries
-#ARDUINO_USER_LIBDIR=~/Arduino/libraries
-
+# Set the directory of your Arduino installation directory
 ARDUINO_DIR=/home/boul/src/arduino-1.6.7
 
+# Used by build.sh to find the arduino executable
 ARDUINO_EXE=$ARDUINO_DIR/arduino
 
+# Used by build.sh to start arduino build
 SKETCH_NAME=tftoscillo.ino
-#SKETCH_NAME=testAdcDma.ino
 
+# Used by run.sh to connect to board
 SERIAL_PORT=/dev/ttyACM0
