@@ -4,7 +4,6 @@
 
 #include <SPI.h>
 #include <TFT.h>  // Arduino LCD library
-#include <avr/dtostrf.h>
 
 #include <GenSigDma.h>
 #include <AdcDma.h>
@@ -834,6 +833,14 @@ void drawTriggerArrow(POT_VAR *potVar, bool potVarChanged)
 	}
 }
 
+// Clone of dtostrf to avoid conflicts and missing include files
+char *tftosc_dtostrf(float val, signed char width, unsigned char prec, char *sout) {
+  char fmt[20];
+  sprintf(fmt, "%%%d.%df", width, prec);
+  sprintf(sout, fmt, val);
+  return sout;
+}
+
 void drawVar(VAR_DISPLAY *var, VAR_TYPE type)
 {
 	char textBuf[40];
@@ -867,7 +874,7 @@ void drawVar(VAR_DISPLAY *var, VAR_TYPE type)
 
 		if (type == VAR_TYPE_FLOAT) {
 			char strValue[10];
-			dtostrf(valuef, 0, 1, strValue);
+			tftosc_dtostrf(valuef, 0, 1, strValue);
 			// dirty hack: remove trailing .0 if integer !
 			if (strValue[strlen(strValue) - 1] == '0') {
 				strValue[strlen(strValue) - 2] = 0;
