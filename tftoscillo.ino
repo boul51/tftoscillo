@@ -25,23 +25,18 @@
 
 // Pot and scope inputs
 #define SCOPE_CHANNEL_1			7
-#define SCOPE_CHANNEL_2			6
-#define SCOPE_CHANNEL_3			5
-#define SCOPE_CHANNEL_4			4
+#define SCOPE_CHANNEL_2			4
+#define SCOPE_CHANNEL_3			6
+#define SCOPE_CHANNEL_4			5
 #define FREQ_CHANNEL			3
 #define ADC_RATE_CHANNEL		2
 #define TRIGGER_CHANNEL			1
 #define GAIN_CHANNEL_1			0
 
-// Resistors definitions
-// Input is made of a voltage divider (2 resistors)
-#define RES_SIG_INPUT	967000	// Signal to input
-#define RES_GND_INPUT	33000	// Ground to input
-
 // Pot definitions
 
 #define POT_ANALOG_MAX_VAL (988*ANALOG_MAX_VAL/1000)	// This is used for pot input. Max value read is not 4096 but around 4050 ie 98.8%
-#define POT_ANALOG_DIFF				20					// Min difference between two pot value to consider is was moved
+#define POT_ANALOG_DIFF				20					// Min difference between two pot values to consider is was moved
 
 #define TRIGGER_TIMEOUT				1000
 
@@ -155,6 +150,7 @@ uint32_t g_scopeRates[] = {
 };
 
 // Gain available values
+/*
 uint32_t g_scopeGains[] = {
 	1,
 	2,
@@ -163,6 +159,20 @@ uint32_t g_scopeGains[] = {
 	20,
 	50,
 	100,
+};
+*/
+// Vertical resolutions, in V/div
+float g_scopeVRes[] = {
+	0.05,
+	0.1,
+	0.25,
+	0.5,
+	1.,
+	2.5,
+	5.,
+	10.,
+	25.,
+	50.,
 };
 
 SCOPE_STATE g_scopeState =
@@ -207,16 +217,27 @@ POT_VAR g_potVars[] =
 		.adcChannel	= TRIGGER_CHANNEL,
 		.potValue	= 0,
 		.prevPotValue = 0,
-		.minValue	= &g_scopeState.minTriggerVal,
-		.maxValue	= &g_scopeState.maxTriggerVal,
-		.value		= &g_scopeState.triggerVal,
+		.minValue	= NULL,
+		.maxValue	= NULL,
+		.value		= NULL,
 		.prevValue	= 0,
-		.margin		= POT_ANALOG_DIFF,
+		//.margin		= POT_ANALOG_DIFF,
+		.margin		= 5,
 		.forceRead	= true,
 		.name		= "TRIG",
 		.cbPotVarChanged = cbPotVarChangedTrig,
 		.bHasVarDisplay = false,
 		.display	= {
+			.bNeedsErase	= false,
+			.prefix			= "",
+			.suffix			= "",
+			.prevSuffix		= "",
+			.value			= 0,
+			.prevValue		= 0,
+			.valuef			= 0.,
+			.prevValuef		= 0.,
+			.x				= 0,
+			.y				= 0,
 		}
 	},
 	{
@@ -324,6 +345,8 @@ void setup() {
 		g_channelDescs[i].channel = g_scopeChannels[i];
 		g_channelDescs[i].bufSize = TFT_WIDTH;
 		g_channelDescs[i].swGain = 1.;
+		g_channelDescs[i].hwGain = 1;
+		g_channelDescs[i].gndOffset = 0;
 
 		g_channelDescs[i].r = g_scopeColors[i][0];
 		g_channelDescs[i].g = g_scopeColors[i][1];
@@ -345,6 +368,7 @@ void setup() {
 	SCmd.addCommand("ch", channelCountHandler);
 	SCmd.addCommand("bl", blHandler);
 	SCmd.addCommand("gain", channelGainHandler);
+	SCmd.addCommand("cal", calHandler);
 	SCmd.addDefaultHandler(defaultHandler);
 
 	// Initialize LCD
@@ -368,6 +392,43 @@ void setup() {
 	drawGrid(0, TFT_WIDTH);
 
 	updatePotsVars(NULL);
+
+	// Auto calibrate first channel
+	calChannel(0);
+}
+
+void calChannel(int chIdx)
+{
+	uint16_t gndValue;
+	float avg = 0.;
+	int avgCnt = 30;
+	CHANNEL_DESC *ch;
+	int hwGain;
+	int i;
+
+	ch = &g_channelDescs[chIdx];
+
+	//g_adcDma->Stop();
+
+	// Store gain, we'll disable it to find ground value
+	hwGain = g_adcDma->GetChannelGain(ch->channel);
+	g_adcDma->SetChannelGain(ch->channel, 4);
+	for (i = 0; i < avgCnt; i++) {
+		g_adcDma->ReadSingleValue(ch->channel, &gndValue);
+		delay(10);
+		avg += (float)gndValue;
+	}
+	avg /= (float)avgCnt;
+	gndValue = (uint16_t)avg;
+	//g_adcDma->ReadSingleValue(ch->channel, &gndValue);
+	g_adcDma->SetChannelGain(ch->channel, hwGain);
+	Serial.print("Got value: ");
+	Serial.println(gndValue);
+
+	ch->gndOffset = (gndValue - ANALOG_MAX_VAL / 2);
+
+	Serial.print("gndOffset: ");
+	Serial.println(ch->gndOffset);
 }
 
 void defaultHandler()
@@ -387,6 +448,31 @@ void zoomHandler()
 	}
 
 	g_zoom = atoi(strZoom);
+}
+
+void calHandler()
+{
+	uint chIdx;
+	char * strCh;
+
+	strCh = SCmd.next();
+
+	if (strCh == NULL) {
+		Serial.println("calHandler: expecting channel index argument");
+		return;
+	}
+
+	chIdx = (uint)atoi(strCh);
+
+	Serial.print("Got channel index ");
+	Serial.println(chIdx);
+
+	if (chIdx >= DIMOF(g_scopeChannels)) {
+		Serial.println("calHandler: invalid channel");
+		return;
+	}
+
+	calChannel(chIdx);
 }
 
 void channelCountHandler()
@@ -564,7 +650,9 @@ void formHandler()
 		return;
 	}
 
-	PF(true, "TODO\r\n");
+	g_genSigDma->Stop();
+	g_genSigDma->SetWaveForm(g_sigState.waveform, g_sigState.freq, NULL);
+	g_genSigDma->Start();
 }
 
 void blHandler()
@@ -632,7 +720,20 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 
 			PF(false, "Got channel %d, sample %d\r\n", channel, sample);
 
+			/*
+			if (iFrame == 0) {
+				Serial.print("Channel ");
+				Serial.print(channel);
+				Serial.print(", rawSample ");
+				Serial.print(rawSample);
+				Serial.print(", sample ");
+				Serial.println(sample);
+			}
+			*/
+
 			channelDesc = getChannelDesc(channel);
+
+			sample -= channelDesc->hwGain * channelDesc->gndOffset / 4;
 
 			float gain = channelDesc->swGain;
 			if (gain != 1.) {
@@ -646,7 +747,7 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 			}
 
 			if (channelDesc) {
-				mappedVal = map(sample, 0, SAMPLE_MAX_VAL, g_maxY, g_minY);
+				mappedVal = map(sample, 0, SAMPLE_MAX_VAL, g_maxY - 1, g_minY);
 				channelDesc->curSamples[iFrame + frameOffset] = mappedVal;
 			}
 		}
@@ -682,20 +783,43 @@ void drawBegin()
 
 void drawTriggerArrow(POT_VAR *potVar, bool potVarChanged)
 {
+	CHANNEL_DESC *ch;
+	float gain;
+	ch = getChannelDesc(g_scopeState.triggerChannel);
+	// Update current and new value
+	//g_scopeState.triggerVal = (uint)((float)potVar->potValue / ch->swGain);
+	g_scopeState.triggerVal = potVar->potValue;
+
+	potVar->display.prevValue = potVar->display.value;
+
+	//potVar->display.value = (uint)((float)potVar->potValue * ch->swGain);
+
+	gain = ch->swGain;
+
+	potVar->display.value = (uint)((float)((int)potVar->potValue - ch->gndOffset * (int)ch->hwGain / 4)*
+								   gain - (gain - 1.) *
+								   (float)SAMPLE_MAX_VAL / 2.);
+
 	// Redraw trigger line (always since signal may overwrite it)
 	for (int i = 0; i < 2; i++) {
 		int y;
 		if (i == 0 && potVarChanged) {
 			// Erase
 			TFTscreen.stroke(BG_COLOR);
-			y = potVar->prevValue;
+			y = potVar->display.prevValue;
 		}
 		else {
 			// Draw
 			TFTscreen.stroke(TRIGGER_COLOR);
-			y = *potVar->value;
+			y = potVar->display.value;
 		}
 		y = map(y, 0, ANALOG_MAX_VAL, g_maxY, g_minY);
+
+		if (y < g_minY)
+			y = g_minY;
+		if (y > g_maxY)
+			y = g_maxY;
+
 		TFTscreen.line(0, y, TRIGGER_ARROW_LEN, y);
 
 		/* Use this to draw arrow towards right */
@@ -972,6 +1096,8 @@ bool computeFrameRate()
 		s_prevSec = sec;
 		g_fpsVarDisplay.prevValue = g_fpsVarDisplay.value;
 		g_fpsVarDisplay.value = s_loops;
+		// Debug
+		g_fpsVarDisplay.value = g_channelDescs[0].gndOffset;
 		if (g_fpsVarDisplay.prevValue != g_fpsVarDisplay.value) {
 			g_fpsVarDisplay.bNeedsErase = true;
 			bRet = true;
@@ -1008,6 +1134,8 @@ void findTriggerSample(uint16_t *buffer, int buflen, int *triggerIndex)
 	bool bArmed = false;
 	bool bFound = false;
 	int prevTriggerIndex = *triggerIndex;
+
+	triggerVal = g_scopeState.triggerVal;
 
 	for (int iSample = 0; iSample < buflen; iSample++) {
 		rawSample = buffer[iSample];
@@ -1271,10 +1399,10 @@ uint freqFromPotValue(uint potValue)
 	return g_dacFreqs[idx];
 }
 
-uint gainFromPotValue(uint potValue)
+float vResFromPotValue(uint potValue)
 {
-	int idx = potValue * DIMOF(g_scopeGains) / ANALOG_MAX_VAL;
-	return g_scopeGains[idx];
+	int idx = potValue * DIMOF(g_scopeVRes) / ANALOG_MAX_VAL;
+	return g_scopeVRes[DIMOF(g_scopeVRes) - idx - 1];
 }
 
 uint computeTimeout()
@@ -1360,12 +1488,19 @@ void cbPotVarChangedFreq(POT_VAR *potVar)
 
 void cbPotVarChangedTrig(POT_VAR *potVar)
 {
+	//CHANNEL_DESC * ch;
 	drawTriggerArrow(potVar, true);
 	drawGrid(0, TFT_WIDTH);
 	// Force drawn samples to 0 to redraw all
 	g_drawState.drawnFrames = 0;
 	drawEraseSamples(true, false);
 	uint timeout = computeTimeout();
+	/*
+	ch = getChannelDesc(g_scopeState.triggerChannel);
+	potVar->display.prevValue = potVar->display.value;
+	g_scopeState.triggerVal = (uint)((float)potVar->potValue /
+									 (float)ch->hwGain / ch->swGain);
+	*/
 	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, timeout);
 }
 
@@ -1373,15 +1508,30 @@ void cbPotVarChangedGain(POT_VAR *potVar)
 {
 	CHANNEL_DESC *ch;
 	char c;
-	float res; // voltage resolution
-	uint gain;
+	float vres;		// voltage resolution (V/div)
+	float G = 54.6;	// input gain = Vin/Vout
+	float gain;		// total display gain
+	uint nDiv;		// number of divisions
 
 	// Get channel index from potVar name.
-	// We expect something like GAINX where X is the channel index
+	// We expect name to be something like "GAINX",
+	// where X is the channel index
 	c = potVar->name[strlen(potVar->name) - 1];
 	ch = &g_channelDescs[c - '0'];
 
-	gain = gainFromPotValue(potVar->potValue);
+	vres = vResFromPotValue(potVar->potValue);
+
+	nDiv = (g_maxY - g_minY + 1) / VGRID_INTERVAL;
+
+	/*
+	 * vres is given by:
+	 * vres = G * VREF * nDiv / gain;
+	 * where : G is Vin/Vout
+	 *         gain is the total display gain applied (hw*sw)
+	 *         nDiv is the number of divisions
+	 */
+
+	gain = G * 3.3 / (float)nDiv / vres;
 
 	if (gain >= 4) {
 		ch->hwGain = 4;
@@ -1395,16 +1545,18 @@ void cbPotVarChangedGain(POT_VAR *potVar)
 	ch->swGain = (float)gain / (float)ch->hwGain;
 	g_adcDma->SetChannelGain(ch->channel, ch->hwGain);
 
-	res = ((float)RES_SIG_INPUT + (float)(RES_GND_INPUT)) /
-			(float)RES_GND_INPUT;
-
-	// Compute V/div for display
-	res *= 3.3 * VGRID_INTERVAL / (float)(g_maxY - g_minY) / (float)gain;
-
 	potVar->display.prevValuef = potVar->display.valuef;
-	potVar->display.valuef = res;
-	potVar->display.suffix = "V/div";
-	potVar->display.prevSuffix = "V/div";
+	potVar->display.prevSuffix = potVar->display.suffix;
+
+	if (vres >= 1.) {
+		potVar->display.suffix = "V/div";
+		potVar->display.valuef = vres;
+	}
+	else {
+		potVar->display.suffix = "mV/div";
+		potVar->display.valuef = vres * 1000.;
+	}
+
 	drawVar(&potVar->display, VAR_TYPE_FLOAT);
 }
 
