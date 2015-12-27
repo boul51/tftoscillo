@@ -34,7 +34,7 @@ fi
 
 echo "Will build and upload program"
 
-$ARDUINO_EXE --upload $SKETCH_NAME
+$ARDUINO_EXE --verify --board $BOARD_NAME $SKETCH_NAME
 
 if [ $? != 0 ]; then
 	echo "arduino upload command failed !"

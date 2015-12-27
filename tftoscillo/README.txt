@@ -7,6 +7,9 @@ To edit project in qtCreator :
  - in build settings:
    - disable shadow build
    - remove all build steps and add a new custom step with command build.sh
+ - in run settings:
+   - add a run configuration (custom executable)
+   - set run.sh for executable name
  - build and run commands should then be available
 
 You should then be able to build and run the project from qtcreator
