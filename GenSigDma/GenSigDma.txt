@@ -26,7 +26,7 @@ RC = Ttc/Tsig * DACC_DMA_BUF_NUM * DACC_DMA_BUF_SIZE
 RC = Fsig / Ftc * DACC_DMA_BUF_NUM * DACC_DMA_BUF_SIZE
 
 
-// We need at least to timer clocks for one sample (RA and RC)
+// We need at least two timer clocks for one sample (RA and RC)
 
 => Tsample > 2 * Ttc (Needs time for RA and RC)
 => Ttc < Tsample / 2
