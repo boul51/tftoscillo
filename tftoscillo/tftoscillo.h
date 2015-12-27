@@ -24,7 +24,7 @@ typedef struct _CHANNEL_DESC {
 	int channel;
 	float totalGain;
 	float swGain;
-	uint  hwGain;
+	uint32_t  hwGain;
 	int gndOffset;
 	int bufSize;
 	uint16_t *curSamples;
@@ -51,24 +51,24 @@ typedef struct _DRAW_STATE {
 }DRAW_STATE;
 
 typedef struct _SCOPE_STATE {
-	uint sampleRate;
-	uint triggerChannel;
-	uint triggerVal;
-	uint minTriggerVal;
-	uint maxTriggerVal;
-	uint triggerStatus;
+	uint32_t sampleRate;
+	uint32_t triggerChannel;
+	uint32_t triggerVal;
+	uint32_t minTriggerVal;
+	uint32_t maxTriggerVal;
+	uint32_t triggerStatus;
 	bool bTriggerStatusChanged;
-	uint prevScopeChannelsCount;
-	uint scopeChannelsCount;
-	uint newScopeChannelsCount;
+	uint32_t prevScopeChannelsCount;
+	uint32_t scopeChannelsCount;
+	uint32_t newScopeChannelsCount;
 	bool bScopeChannelsCountChanged;
-	uint blVal;
+	uint32_t blVal;
 }SCOPE_STATE;
 
 typedef struct _SIG_STATE {
-	uint minFreq;
-	uint maxFreq;
-	uint freq;
+	uint32_t minFreq;
+	uint32_t maxFreq;
+	uint32_t freq;
 	GenSigDma::WaveForm waveform;
 }SIG_STATE;
 
@@ -80,13 +80,18 @@ typedef enum _VAR_TYPE {
 struct _POT_VAR;
 typedef void (*cbPotVarChanged_t)(struct _POT_VAR *);
 
+void cbPotVarChangedRate(_POT_VAR *potVar);
+void cbPotVarChangedFreq(_POT_VAR *potVar);
+void cbPotVarChangedTrig(_POT_VAR *potVar);
+void cbPotVarChangedGain(_POT_VAR *potVar);
+
 typedef struct _VAR_DISPLAY {
 	bool bNeedsErase;
 	const char *prefix;
 	const char *suffix;
 	const char *prevSuffix;
-	uint value;
-	uint prevValue;
+	uint32_t value;
+	uint32_t prevValue;
 	float valuef;
 	float prevValuef;
 	int x;
@@ -94,14 +99,14 @@ typedef struct _VAR_DISPLAY {
 }VAR_DISPLAY;
 
 typedef struct _POT_VAR {
-	uint adcChannel;
-	uint potValue;
-	uint prevPotValue;
-	uint *minValue;
-	uint *maxValue;
-	uint *value;
-	uint prevValue;
-	uint margin;
+	uint32_t adcChannel;
+	uint32_t potValue;
+	uint32_t prevPotValue;
+	uint32_t *minValue;
+	uint32_t *maxValue;
+	uint32_t *value;
+	uint32_t prevValue;
+	uint32_t margin;
 	bool forceRead;
 	const char *name;
 	cbPotVarChanged_t cbPotVarChanged;

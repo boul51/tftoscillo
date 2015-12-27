@@ -1,4 +1,6 @@
 
+#include <Arduino.h>
+
 #include "AdcDma.h"
 #include <LibDbg.h>
 

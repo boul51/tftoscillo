@@ -2,7 +2,6 @@
 #ifndef _GEN_SIG_DMA_H_
 #define _GEN_SIG_DMA_H_
 
-#include <Arduino.h>
 #include <stdarg.h>
 
 // Uncomment to enable Serial debug messages

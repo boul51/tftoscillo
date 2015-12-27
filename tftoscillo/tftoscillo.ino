@@ -1,12 +1,14 @@
-#include <GenSigDma.h>
-#include <AdcDma.h>
-#include <LibDbg.h>
+#include <Arduino.h>
 
 #include <SerialCommand.h>
 
 #include <SPI.h>
 #include <TFT.h>  // Arduino LCD library
 #include <avr/dtostrf.h>
+
+#include <GenSigDma.h>
+#include <AdcDma.h>
+#include <LibDbg.h>
 
 #include "tftoscillo.h"
 
@@ -59,7 +61,7 @@
 
 int g_zoom = 1;
 
-uint g_frameRate = 0;		// Scope fps
+uint32_t g_frameRate = 0;		// Scope fps
 
 AdcDma::TriggerMode g_triggerMode = AdcDma::RisingEdge;
 
@@ -294,7 +296,7 @@ POT_VAR g_potVars[] =
 	},
 	{
 		.adcChannel	= FREQ_CHANNEL,
-		.potValue	= (uint)-1,
+        .potValue	= (uint32_t)-1,
 		.prevPotValue = 0,
 		.minValue	= &g_sigState.minFreq,
 		.maxValue	= &g_sigState.maxFreq,
@@ -341,7 +343,7 @@ void setup() {
 	g_channelDescs = (CHANNEL_DESC *)malloc(DIMOF(g_scopeChannels) * sizeof(CHANNEL_DESC));
 
 	// Init channels descriptors
-	for (uint i = 0; i < DIMOF(g_scopeChannels); i++) {
+    for (uint32_t i = 0; i < DIMOF(g_scopeChannels); i++) {
 		g_channelDescs[i].channel = g_scopeChannels[i];
 		g_channelDescs[i].bufSize = TFT_WIDTH;
 		g_channelDescs[i].swGain = 1.;
@@ -452,7 +454,7 @@ void zoomHandler()
 
 void calHandler()
 {
-	uint chIdx;
+    uint32_t chIdx;
 	char * strCh;
 
 	strCh = SCmd.next();
@@ -462,7 +464,7 @@ void calHandler()
 		return;
 	}
 
-	chIdx = (uint)atoi(strCh);
+    chIdx = (uint32_t)atoi(strCh);
 
 	Serial.print("Got channel index ");
 	Serial.println(chIdx);
@@ -686,7 +688,7 @@ void blHandler()
 
 inline CHANNEL_DESC *getChannelDesc(int channel)
 {
-	for (uint i = 0; i < DIMOF(g_scopeChannels); i++) {
+    for (uint32_t i = 0; i < DIMOF(g_scopeChannels); i++) {
 		if (g_channelDescs[i].channel == channel)
 			return &g_channelDescs[i];
 	}
@@ -737,7 +739,7 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 
 			float gain = channelDesc->swGain;
 			if (gain != 1.) {
-				scaledSample = (uint)((float)sample * gain - (gain - 1.) *
+                scaledSample = (uint32_t)((float)sample * gain - (gain - 1.) *
 						(float)SAMPLE_MAX_VAL / 2.);
 				if (scaledSample < 0)
 					scaledSample = 0;
@@ -764,7 +766,7 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 
 void swapSampleBuffer()
 {
-	for (uint iChannel = 0; iChannel < DIMOF(g_scopeChannels); iChannel++) {
+    for (uint32_t iChannel = 0; iChannel < DIMOF(g_scopeChannels); iChannel++) {
 		CHANNEL_DESC *pChannelDesc = &g_channelDescs[iChannel];
 		if (pChannelDesc->curSamples == pChannelDesc->samples[0]) {
 			pChannelDesc->curSamples = pChannelDesc->samples[1];
@@ -787,16 +789,16 @@ void drawTriggerArrow(POT_VAR *potVar, bool potVarChanged)
 	float gain;
 	ch = getChannelDesc(g_scopeState.triggerChannel);
 	// Update current and new value
-	//g_scopeState.triggerVal = (uint)((float)potVar->potValue / ch->swGain);
+    //g_scopeState.triggerVal = (uint32_t)((float)potVar->potValue / ch->swGain);
 	g_scopeState.triggerVal = potVar->potValue;
 
 	potVar->display.prevValue = potVar->display.value;
 
-	//potVar->display.value = (uint)((float)potVar->potValue * ch->swGain);
+    //potVar->display.value = (uint32_t)((float)potVar->potValue * ch->swGain);
 
 	gain = ch->swGain;
 
-	potVar->display.value = (uint)((float)((int)potVar->potValue - ch->gndOffset * (int)ch->hwGain / 4)*
+    potVar->display.value = (uint32_t)((float)((int)potVar->potValue - ch->gndOffset * (int)ch->hwGain / 4)*
 								   gain - (gain - 1.) *
 								   (float)SAMPLE_MAX_VAL / 2.);
 
@@ -1009,7 +1011,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 
 		// Erase first old sample
 
-		for (uint iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
+        for (uint32_t iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
 			oldSamples = g_channelDescs[iChannel].oldSamples;
 			TFTscreen.stroke(BG_COLOR);
 			TFTscreen.line(0, oldSamples[0], s_prevZoom, oldSamples[1]);
@@ -1020,7 +1022,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 		// Erase sample iSample+1 while drawing sample iSample
 		// otherwise, new drawn line could be overwritten by erased line
 		for (;;) {
-			for (uint iChannel = 0; iChannel < g_scopeState.prevScopeChannelsCount; iChannel++) {
+            for (uint32_t iChannel = 0; iChannel < g_scopeState.prevScopeChannelsCount; iChannel++) {
 				oldSamples = g_channelDescs[iChannel].oldSamples;
 				// Erase old sample
 				if (iSample + 1 < TFT_WIDTH) {
@@ -1035,7 +1037,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 
 			lastXErase += s_prevZoom;
 
-			for (uint iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
+            for (uint32_t iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
 				newSamples = g_channelDescs[iChannel].curSamples;
 				// Draw new sample
 				TFTscreen.stroke(g_channelDescs[iChannel].r, g_channelDescs[iChannel].g, g_channelDescs[iChannel].b);
@@ -1059,7 +1061,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 
 			PF(false, "x0 %d, x1 %d, df %d, sf %d\r\n", xStart, xStart + 1, g_drawState.drawnFrames, g_drawState.mappedFrames);
 
-			for (uint iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
+            for (uint32_t iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
 				CHANNEL_DESC *pDesc = &g_channelDescs[iChannel];
 				TFTscreen.stroke(pDesc->r, pDesc->g, pDesc->b);
 				TFTscreen.line(xStart, pDesc->curSamples[xStart], xStart + 1, pDesc->curSamples[xStart + 1]);
@@ -1075,7 +1077,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 	else if (bErase) {
 		TFTscreen.stroke(BG_COLOR);
 		for (int iFrame = 0; iFrame < TFT_WIDTH; iFrame++) {
-			for (uint iChannel = 0; iChannel < g_scopeState.prevScopeChannelsCount; iChannel++) {
+            for (uint32_t iChannel = 0; iChannel < g_scopeState.prevScopeChannelsCount; iChannel++) {
 				CHANNEL_DESC *pDesc = &g_channelDescs[iChannel];
 				TFTscreen.line(iFrame - 1, pDesc->oldSamples[iFrame - 1], iFrame, pDesc->oldSamples[iFrame]);
 			}
@@ -1088,9 +1090,9 @@ void drawEraseSamples(bool bDraw, bool bErase)
 bool computeFrameRate()
 {
 	bool bRet = false;
-	uint sec = millis() / 1000;
-	static uint s_prevSec = 0;
-	static uint s_loops = 0;
+    uint32_t sec = millis() / 1000;
+    static uint32_t s_prevSec = 0;
+    static uint32_t s_loops = 0;
 
 	if (sec != s_prevSec) {
 		s_prevSec = sec;
@@ -1258,8 +1260,8 @@ void updatePotsVars(uint16_t *buffer)
 	uint16_t rawSample;
 	uint16_t potValue;
 	uint16_t channel;
-	uint value;
-	uint diff;
+    uint32_t value;
+    uint32_t diff;
 	POT_VAR *potVar;
 
 	int channelsCount = g_adcDma->GetAdcChannelsCount();
@@ -1323,8 +1325,8 @@ void setupAdcDma()
 {
 	int  buflen;				// Size of ADC DMA buffers
 	int  bufcount = 5;			// Number of ADC DMA buffers
-	uint irqsPerSec;			// Number of ADC DMA IRQs/sec
-	uint maxIrqsPerSec = 500;	// Max number of ADC DMA IRQs/sec we want
+    uint32_t irqsPerSec;			// Number of ADC DMA IRQs/sec
+    uint32_t maxIrqsPerSec = 500;	// Max number of ADC DMA IRQs/sec we want
 	int  channelsCount = 0;
 	uint16_t channels[ADC_DMA_MAX_ADC_CHANNEL];
 
@@ -1336,7 +1338,7 @@ void setupAdcDma()
 	}
 
 	// Add scope channels
-	for (uint i = 0; i < g_scopeState.scopeChannelsCount; i++) {
+    for (uint32_t i = 0; i < g_scopeState.scopeChannelsCount; i++) {
 		channels[i] = g_scopeChannels[i];
 		channelsCount++;
 	}
@@ -1380,11 +1382,11 @@ void setupAdcDma()
 
 	g_adcDma->SetAdcChannels(channels, channelsCount);
 	g_adcDma->SetBuffers(bufcount, buflen);
-	uint timeout = computeTimeout();
+    uint32_t timeout = computeTimeout();
 	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, timeout);
 }
 
-uint usecPerDivFromPotValue(uint potValue)
+uint32_t usecPerDivFromPotValue(uint32_t potValue)
 {
 	int idx = potValue * DIMOF(g_scopeRates) / ANALOG_MAX_VAL;
 	idx = DIMOF(g_scopeRates) - idx - 1;
@@ -1393,21 +1395,21 @@ uint usecPerDivFromPotValue(uint potValue)
 	return rate;
 }
 
-uint freqFromPotValue(uint potValue)
+uint32_t freqFromPotValue(uint32_t potValue)
 {
 	int idx = potValue * DIMOF(g_dacFreqs) / ANALOG_MAX_VAL;
 	return g_dacFreqs[idx];
 }
 
-float vResFromPotValue(uint potValue)
+float vResFromPotValue(uint32_t potValue)
 {
 	int idx = potValue * DIMOF(g_scopeVRes) / ANALOG_MAX_VAL;
 	return g_scopeVRes[DIMOF(g_scopeVRes) - idx - 1];
 }
 
-uint computeTimeout()
+uint32_t computeTimeout()
 {
-	uint timeout = 4 * TFT_WIDTH * 1000 / g_scopeState.sampleRate;
+    uint32_t timeout = 4 * TFT_WIDTH * 1000 / g_scopeState.sampleRate;
 	if (timeout > 1000)
 		timeout = 1000;
 	else if (timeout == 0)
@@ -1416,7 +1418,7 @@ uint computeTimeout()
 	return timeout;
 }
 
-const char *sampleRateSuffix(uint usecPerDiv, float *dispValue)
+const char *sampleRateSuffix(uint32_t usecPerDiv, float *dispValue)
 {
 	const char *suffix;
 
@@ -1438,7 +1440,7 @@ const char *sampleRateSuffix(uint usecPerDiv, float *dispValue)
 
 POT_VAR *getPotVar(const char *name)
 {
-	for (uint i = 0; i < DIMOF(g_potVars); i++) {
+    for (uint32_t i = 0; i < DIMOF(g_potVars); i++) {
 		if (strcmp(g_potVars[i].name, name) == 0)
 			return &g_potVars[i];
 	}
@@ -1449,9 +1451,9 @@ POT_VAR *getPotVar(const char *name)
 void cbPotVarChangedRate(POT_VAR *potVar)
 {
 	// Get us/div
-	uint usecPerDiv = usecPerDivFromPotValue(potVar->potValue);
+    uint32_t usecPerDiv = usecPerDivFromPotValue(potVar->potValue);
 	// Convert it to frequency
-	uint scopeRate = VGRID_INTERVAL * 1000000 / usecPerDiv;
+    uint32_t scopeRate = VGRID_INTERVAL * 1000000 / usecPerDiv;
 	if (scopeRate != g_scopeState.sampleRate) {
 		g_scopeState.sampleRate = scopeRate;
 		potVar->display.prevValuef = potVar->display.valuef;
@@ -1474,7 +1476,7 @@ void cbPotVarChangedRate(POT_VAR *potVar)
 
 void cbPotVarChangedFreq(POT_VAR *potVar)
 {
-	uint freq = freqFromPotValue(potVar->potValue);
+    uint32_t freq = freqFromPotValue(potVar->potValue);
 	if (freq != g_sigState.freq) {
 		g_sigState.freq = freq;
 		potVar->display.prevValue = potVar->display.value;
@@ -1494,11 +1496,11 @@ void cbPotVarChangedTrig(POT_VAR *potVar)
 	// Force drawn samples to 0 to redraw all
 	g_drawState.drawnFrames = 0;
 	drawEraseSamples(true, false);
-	uint timeout = computeTimeout();
+    uint32_t timeout = computeTimeout();
 	/*
 	ch = getChannelDesc(g_scopeState.triggerChannel);
 	potVar->display.prevValue = potVar->display.value;
-	g_scopeState.triggerVal = (uint)((float)potVar->potValue /
+    g_scopeState.triggerVal = (uint32_t)((float)potVar->potValue /
 									 (float)ch->hwGain / ch->swGain);
 	*/
 	g_adcDma->SetTrigger(g_scopeState.triggerVal, g_triggerMode, g_scopeState.triggerChannel, timeout);
@@ -1511,7 +1513,7 @@ void cbPotVarChangedGain(POT_VAR *potVar)
 	float vres;		// voltage resolution (V/div)
 	float G = 54.6;	// input gain = Vin/Vout
 	float gain;		// total display gain
-	uint nDiv;		// number of divisions
+    uint32_t nDiv;		// number of divisions
 
 	// Get channel index from potVar name.
 	// We expect name to be something like "GAINX",

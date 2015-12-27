@@ -2,8 +2,6 @@
 #ifndef _ADC_DMA_H_
 #define _ADC_DMA_H
 
-#include <Arduino.h>
-
 #define MCLK 84000000
 #define ADC_DMA_MAX_VAL 4095
 

@@ -1,4 +1,6 @@
 
+#include <Arduino.h>
+
 #include "GenSigDma.h"
 
 // DAC and timer setup from:
