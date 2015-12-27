@@ -9,5 +9,9 @@ ARDUINO_EXE=$ARDUINO_DIR/arduino
 # Used by build.sh to start arduino build
 SKETCH_NAME=tftoscillo.ino
 
+# Used to specify board name to arduino
+# Use arduino_due_x_dbg for programming port
+BOARD_NAME=arduino:sam:arduino_due_x
+
 # Used by run.sh to connect to board
 SERIAL_PORT=/dev/ttyACM0
