@@ -3,6 +3,9 @@
 # Set the directory of your Arduino installation directory
 ARDUINO_DIR=/home/boul/src/arduino-1.6.7
 
+# Set the directory of your Due package installation directory
+SAM_DIR=/home/boul/.arduino15
+
 # Used by build.sh to find the arduino executable
 ARDUINO_EXE=$ARDUINO_DIR/arduino
 

@@ -9,8 +9,9 @@ INCLUDEPATH += ../GenSigDma \
                ../AdcDma \
                ../LibDbg \
                ../ArduinoSerialCommand \
-               $$ARDUINO_DIR/hardware/arduino/avr/cores/arduino \
-               $$ARDUINO_DIR/hardware/arduino/avr/libraries/SPI \
+               $$SAM_DIR/packages/arduino/hardware/sam/1.6.6/cores/arduino \
+               $$SAM_DIR/packages/arduino/hardware/sam/1.6.6/libraries/SPI \
+               $$SAM_DIR/packages/arduino/hardware/sam/1.6.6/variants/arduino_due_x \
                $$ARDUINO_DIR/libraries/TFT/src
 
 HEADERS += ../GenSigDma/*.h \
