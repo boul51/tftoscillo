@@ -2,11 +2,13 @@ To use build.sh and run.sh scripts :
 Modify ARDUINO_DIR in prefs.mk to point to your arduino installation directory
 
 To edit project in qtCreator :
+ - cd tftoscillo
  - qtcreator tftoscillo.pro
  - select at least one kit in "Configure Project"
  - in build settings:
    - disable shadow build
    - remove all build steps and add a new custom step with command build.sh
+   - remove all clean steps and add a new custom step with command clean.sh
  - in run settings:
    - add a run configuration (custom executable)
    - set run.sh for executable name
