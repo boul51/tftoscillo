@@ -859,14 +859,14 @@ void AdcDma::triggerEnableInterrupt()
 	ADC->ADC_IER = ADC_IER_COMPE;
 }
 
-void AdcDma::triggerEnterDisabled(TriggerEvent *event)
+void AdcDma::triggerEnterDisabled(TriggerEvent *)
 {
 	triggerSetState(TriggerStateDisabled);
 
 	triggerDisableInterrupt();
 }
 
-void AdcDma::triggerEnterEnabled(TriggerEvent *event)
+void AdcDma::triggerEnterEnabled(TriggerEvent *)
 {
 	m_triggerBufferInts = 0;
 	m_bTriggerTimeout = false;
@@ -888,7 +888,7 @@ void AdcDma::triggerEnterEnabled(TriggerEvent *event)
 		triggerEnableInterrupt();
 }
 
-void AdcDma::triggerEnterPreArmed(TriggerEvent *event)
+void AdcDma::triggerEnterPreArmed(TriggerEvent *)
 {
 	uint32_t cmpMode, emr;
 
@@ -919,7 +919,7 @@ void AdcDma::triggerEnterPreArmed(TriggerEvent *event)
 	triggerSetState(TriggerStatePreArmed);
 }
 
-void AdcDma::triggerEnterArmed(TriggerEvent *event)
+void AdcDma::triggerEnterArmed(TriggerEvent *)
 {
 	uint32_t emr;
 
@@ -958,7 +958,7 @@ void AdcDma::triggerEnterCapturing(TriggerEvent *event)
 	m_triggerSampleIndex = event->sampleIndex;
 }
 
-void AdcDma::triggerEnterDone(TriggerEvent *event)
+void AdcDma::triggerEnterDone(TriggerEvent *)
 {
 	// All buffers were written, buf writeBufIndex was not updated since
 	// RNPR (next pointer) was used

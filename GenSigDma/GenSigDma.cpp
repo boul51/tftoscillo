@@ -728,8 +728,8 @@ char *gensigdma_floatToStr(float f, int precision)
 }
 
 #else
-void gensigdma_print(const char *fmt, ... ) {}
-char *gensigdma_floatToStr(float f, int precision) {return NULL;}
+void gensigdma_print(const char *, ... ) {}
+char *gensigdma_floatToStr(float, int) {return NULL;}
 #endif
 
 #undef p

@@ -15,3 +15,6 @@ BOARD_NAME=arduino:sam:arduino_due_x
 
 # Used by run.sh to connect to board
 SERIAL_PORT=/dev/ttyACM0
+
+# Used to specify arduino preferences
+ARDUINO_PREFS="--pref compiler.warning_level=all"

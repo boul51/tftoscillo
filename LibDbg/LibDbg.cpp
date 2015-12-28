@@ -44,7 +44,7 @@ char * LibDbg::F2S(float f, int precision)
 
 #else
 
-void LibDbg::pf(bool doPrint, const char * caller, const char *fmt, ... ) {}
-char * LibDbg::F2S(float f, int precision) {return NULL;}
+void LibDbg::pf(bool, const char *, const char *, ... ) {}
+char * LibDbg::F2S(float, int) {return NULL;}
 
 #endif
