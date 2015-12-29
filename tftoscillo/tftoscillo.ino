@@ -178,7 +178,7 @@ float g_scopeVRes[] = {
 
 SCOPE_STATE g_scopeState =
 {
-	.sampleRate		= 100,
+	.sampleRate		= 0,
 	.triggerChannel	= SCOPE_CHANNEL_1,
 	.triggerVal		= 2000,
 	.minTriggerVal	= 0,
