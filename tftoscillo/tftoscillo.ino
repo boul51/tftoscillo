@@ -62,6 +62,9 @@ int g_zoom = 1;
 
 uint32_t g_frameRate = 0;		// Scope fps
 
+// Used to store pots value in slow mode
+uint16_t g_rxBuffer[ADC_DMA_MAX_ADC_CHANNEL];
+
 AdcDma::TriggerMode g_triggerMode = AdcDma::RisingEdge;
 
 // In free run mode, we'll always be at 12 bits res
@@ -114,9 +117,6 @@ SerialCommand SCmd;
 TFT TFTscreen = TFT(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
 uint16_t g_scopeChannels [] = {SCOPE_CHANNEL_1, SCOPE_CHANNEL_2, SCOPE_CHANNEL_3, SCOPE_CHANNEL_4};
-uint16_t g_potChannels [] = {FREQ_CHANNEL, ADC_RATE_CHANNEL, TRIGGER_CHANNEL};
-//int g_scopeChannelsCount = DIMOF(g_scopeChannels);
-int g_potChannelsCount = DIMOF(g_potChannels);
 
 // Channel descriptors
 CHANNEL_DESC *g_channelDescs;
@@ -1231,11 +1231,8 @@ bool rxHandler(uint16_t *buffer, int buflen, bool bIsTrigger, int triggerIndex, 
 		framesInBuf = TFT_WIDTH;
 
 	if (g_drawState.drawMode == DRAW_MODE_SLOW) {
-		// Update pots values from last frame in buffer
-		// Note: skip first samples since they are not very accurate
-		if (g_drawState.rxFrames > 3) {
-			updatePotsVars(buffer + buflen - channelsCount);
-		}
+		// Copy data to buffer, we'll use them in loop() to update pots values
+		memcpy(g_rxBuffer, buffer, channelsCount * sizeof(uint16_t));
 	}
 
 	if (g_scopeState.triggerStatus == TRIGGER_STATUS_WAITING) {
@@ -1352,8 +1349,9 @@ void setupAdcDma()
 
 	// Add pot channels in slow mode
 	if (g_drawState.drawMode == DRAW_MODE_SLOW) {
-		for (int i = 0; i < g_potChannelsCount; i++) {
-			channels[g_scopeState.scopeChannelsCount + i] = g_potChannels[i];
+		for (uint i = 0; i < DIMOF(g_potVars); i++)
+		{
+			channels[g_scopeState.scopeChannelsCount + i] = g_potVars[i].adcChannel;
 			channelsCount++;
 		}
 	}
@@ -1644,12 +1642,29 @@ void loop()
 			drawTriggerArrow(getPotVar("TRIG"), true);
 		}
 
-		computeFrameRate();
-		drawVar(&g_fpsVarDisplay, VAR_TYPE_INT);
-
 		setupAdcDma();
 
 		PF(false, "Starting ADCDMA\r\n");
 		g_adcDma->Start();
+	}
+
+    if (g_drawState.drawMode == DRAW_MODE_SLOW)
+    {
+		// Update pot values in slow mode
+		// Skip first frames since they are not very accurate
+		if (g_drawState.mappedFrames > 3)
+		{
+			updatePotsVars(g_rxBuffer);
+		}
+
+		// If we're too slow in RW handler, capture might have been stopped.
+		// Restart it in this case
+		// Note: this should be handled more properly by using a bigger RX buffer
+		// in slow mode
+		if (g_adcDma->GetCaptureState() == AdcDma::CaptureStateStopped)
+		{
+            PF(true, "Capture is stopped, restarting !\r\n");
+			g_adcDma->Start();
+		}
 	}
 }
