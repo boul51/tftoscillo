@@ -26,9 +26,9 @@
 
 // Pot and scope inputs
 #define SCOPE_CHANNEL_1			7
-#define SCOPE_CHANNEL_2			4
-#define SCOPE_CHANNEL_3			6
-#define SCOPE_CHANNEL_4			5
+#define SCOPE_CHANNEL_2			6
+#define SCOPE_CHANNEL_3			5
+#define SCOPE_CHANNEL_4			4
 #define FREQ_CHANNEL			3
 #define ADC_RATE_CHANNEL		2
 #define TRIGGER_CHANNEL			1
@@ -409,13 +409,14 @@ void calChannel(int chIdx)
 
 	ch = &g_channelDescs[chIdx];
 
-	//g_adcDma->Stop();
+    AdcDma::CaptureState state = g_adcDma->GetCaptureState();
+    g_adcDma->Stop();
 
 	// Store gain, we'll disable it to find ground value
 	hwGain = g_adcDma->GetChannelGain(ch->channel);
 	g_adcDma->SetChannelGain(ch->channel, 4);
 	for (i = 0; i < avgCnt; i++) {
-		g_adcDma->ReadSingleValue(ch->channel, &gndValue);
+        g_adcDma->ReadSingleValue(ch->channel, &gndValue);
 		delay(10);
 		avg += (float)gndValue;
 	}
@@ -430,6 +431,10 @@ void calChannel(int chIdx)
 
 	Serial.print("gndOffset: ");
 	Serial.println(ch->gndOffset);
+
+    if (state == AdcDma::CaptureStateStarted) {
+        g_adcDma->Start();
+    }
 }
 
 void defaultHandler()
@@ -782,7 +787,7 @@ void drawBegin()
 {
 }
 
-void drawTriggerArrow(POT_VAR *potVar, bool potVarChanged)
+void drawTriggerArrow(POT_VAR *potVar, bool bErase)
 {
 	CHANNEL_DESC *ch;
 	float gain;
@@ -804,7 +809,7 @@ void drawTriggerArrow(POT_VAR *potVar, bool potVarChanged)
 	// Redraw trigger line (always since signal may overwrite it)
 	for (int i = 0; i < 2; i++) {
 		int y;
-		if (i == 0 && potVarChanged) {
+        if (i == 0 && bErase) {
 			// Erase
 			TFTscreen.stroke(BG_COLOR);
 			y = potVar->display.prevValue;
@@ -1565,6 +1570,9 @@ void cbPotVarChangedGain(POT_VAR *potVar)
 	}
 
 	drawVar(&potVar->display, VAR_TYPE_FLOAT);
+
+    // Trigger position may change depending on gain, update it
+    drawTriggerArrow(getPotVar("TRIG"), true);
 }
 
 void loop()
@@ -1579,7 +1587,7 @@ void loop()
 				 (g_drawState.drawMode == DRAW_MODE_SLOW && g_drawState.mappedFrames > 0) ) {
 				drawEraseSamples(false, true);
 				drawGrid(0, TFT_WIDTH);
-				drawTriggerArrow(getPotVar("TRIG"), false);
+                drawTriggerArrow(getPotVar("TRIG"), true);
 				g_drawState.bNeedsErase = false;
 			}
 		}
