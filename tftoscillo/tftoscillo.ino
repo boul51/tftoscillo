@@ -178,12 +178,13 @@ float g_scopeVRes[] = {
 
 SCOPE_STATE g_scopeState =
 {
-	.sampleRate		= 0,
-	.triggerChannel	= SCOPE_CHANNEL_1,
-	.triggerVal		= 2000,
-	.minTriggerVal	= 0,
-	.maxTriggerVal	= ANALOG_MAX_VAL,
-	.triggerStatus	= TRIGGER_STATUS_DISABLED,
+	.sampleRate			= 0,
+	.triggerChannel		= SCOPE_CHANNEL_1,
+	.prevTriggerChannel	= SCOPE_CHANNEL_1,
+	.triggerVal			= 2000,
+	.minTriggerVal		= 0,
+	.maxTriggerVal		= ANALOG_MAX_VAL,
+	.triggerStatus		= TRIGGER_STATUS_DISABLED,
 	.bTriggerStatusChanged = false,
 	.prevScopeChannelsCount = 1,
 	.scopeChannelsCount = 1,
@@ -363,6 +364,7 @@ void setup() {
 	}
 
 	SCmd.addCommand("tgmode", triggerModeHandler);
+	SCmd.addCommand("tgch", triggerChannelHandler);
 	SCmd.addCommand("fr", freqRangeHandler);
 	SCmd.addCommand("zoom", zoomHandler);
 	SCmd.addCommand("form", formHandler);
@@ -409,14 +411,14 @@ void calChannel(int chIdx)
 
 	ch = &g_channelDescs[chIdx];
 
-    AdcDma::CaptureState state = g_adcDma->GetCaptureState();
-    g_adcDma->Stop();
+	AdcDma::CaptureState state = g_adcDma->GetCaptureState();
+	g_adcDma->Stop();
 
 	// Store gain, we'll disable it to find ground value
 	hwGain = g_adcDma->GetChannelGain(ch->channel);
 	g_adcDma->SetChannelGain(ch->channel, 4);
 	for (i = 0; i < avgCnt; i++) {
-        g_adcDma->ReadSingleValue(ch->channel, &gndValue);
+		g_adcDma->ReadSingleValue(ch->channel, &gndValue);
 		delay(10);
 		avg += (float)gndValue;
 	}
@@ -432,9 +434,9 @@ void calChannel(int chIdx)
 	Serial.print("gndOffset: ");
 	Serial.println(ch->gndOffset);
 
-    if (state == AdcDma::CaptureStateStarted) {
-        g_adcDma->Start();
-    }
+	if (state == AdcDma::CaptureStateStarted) {
+		g_adcDma->Start();
+	}
 }
 
 void defaultHandler()
@@ -508,7 +510,7 @@ void channelCountHandler()
 void channelGainHandler()
 {
 	char * strCh, *strGain;
-	int ch, gain;
+	int chIdx, gain;
 
 	strCh = SCmd.next();
 
@@ -517,8 +519,8 @@ void channelGainHandler()
 		return;
 	}
 
-	ch = atoi(strCh);
-	if (ch < 0 || ch > ADC_DMA_MAX_ADC_CHANNEL) {
+	chIdx = atoi(strCh);
+	if (chIdx < 0 || chIdx > ADC_DMA_MAX_ADC_CHANNEL) {
 		Serial.println("Invalid channel");
 		return;
 	}
@@ -527,19 +529,15 @@ void channelGainHandler()
 
 	if (strGain == NULL) {
 		Serial.print("Gain for channel ");
-		Serial.print(ch);
+		Serial.print(chIdx);
 		Serial.print(": ");
-		Serial.println(g_adcDma->GetChannelGain(ch));
+		Serial.println(g_adcDma->GetChannelGain(chIdx));
 		return;
 	}
 
 	gain = atoi(strGain);
-	if (gain < 1 || gain > 4) {
-		Serial.println("Invalid gain (must be in range 1-4)");
-		return;
-	}
 
-	g_adcDma->SetChannelGain(ch, gain);
+	setGlobalChannelGain(chIdx, gain);
 }
 
 void freqRangeHandler()
@@ -615,6 +613,31 @@ void triggerModeHandler()
 	else {
 		return;
 	}
+}
+
+void triggerChannelHandler()
+{
+	char * strCh;
+	CHANNEL_DESC *pChDesc = NULL;
+	int chIdx;
+
+	strCh = SCmd.next();
+
+	if (strCh == NULL) {
+		Serial.println("Missing channel argument for trigger channel command");
+		return;
+	}
+
+	chIdx = atoi(strCh);
+	if (chIdx < 0 || chIdx > ADC_DMA_MAX_ADC_CHANNEL) {
+		Serial.println("Invalid channel");
+		return;
+	}
+
+	pChDesc = &g_channelDescs[chIdx];
+
+	g_scopeState.triggerChannel = pChDesc->channel;
+	drawTriggerArrow(getPotVar("TRIG"), true);
 }
 
 void formHandler()
@@ -698,6 +721,16 @@ inline CHANNEL_DESC *getChannelDesc(int channel)
 	}
 
 	return NULL;
+}
+
+inline int getChannelIndex(int adcChannel)
+{
+	for (uint32_t i = 0; i < DIMOF(g_scopeChannels); i++) {
+		if (g_channelDescs[i].channel == adcChannel)
+			return i;
+	}
+
+	return 0;
 }
 
 void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
@@ -809,7 +842,7 @@ void drawTriggerArrow(POT_VAR *potVar, bool bErase)
 	// Redraw trigger line (always since signal may overwrite it)
 	for (int i = 0; i < 2; i++) {
 		int y;
-        if (i == 0 && bErase) {
+		if (i == 0 && bErase) {
 			// Erase
 			TFTscreen.stroke(BG_COLOR);
 			y = potVar->display.prevValue;
@@ -915,12 +948,14 @@ void drawTriggerStatus()
 			g_drawState.drawMode == DRAW_MODE_FAST)
 			return;
 
-		for (int i = 1; i < 2; i++) {
-			String s = String("T");
+		for (int i = 0; i < 2; i++) {
+			int tgAdcChannel;
 			if (i == 0) {
+				tgAdcChannel = g_scopeState.prevTriggerChannel;
 				TFTscreen.stroke(BG_COLOR);
 			}
 			else {
+				tgAdcChannel = g_scopeState.triggerChannel;
 				switch (g_scopeState.triggerStatus) {
 				case TRIGGER_STATUS_TIMEOUT :
 					TFTscreen.stroke(TRIGGER_TIMEOUT_COLOR);
@@ -936,11 +971,13 @@ void drawTriggerStatus()
 					break;
 				}
 			}
-			s.toCharArray(textBuf, 15);
+			sprintf(textBuf, "T(ch%d)", getChannelIndex(tgAdcChannel) + 1); // Draw channel index + 1
 			PF(DBG_TEXT, "drawing text at %d:%d\r\n", 10, TEXT_DOWN_Y_OFFSET);
-			TFTscreen.text(textBuf, TFT_WIDTH / 2, TEXT_DOWN_Y_OFFSET);
+			TFTscreen.text(textBuf, TFT_WIDTH * 2 / 3, TEXT_DOWN_Y_OFFSET);
 		}
 	}
+
+	g_scopeState.prevTriggerChannel = g_scopeState.triggerChannel;
 }
 
 void drawGrid(int minX, int maxX)
@@ -1518,20 +1555,60 @@ void cbPotVarChangedTrig(POT_VAR *potVar)
 
 void cbPotVarChangedGain(POT_VAR *potVar)
 {
-	CHANNEL_DESC *ch;
+	int chIdx;
 	char c;
 	float vres;		// voltage resolution (V/div)
-	float G = 54.6;	// input gain = Vin/Vout
-	float gain;		// total display gain
-    uint32_t nDiv;		// number of divisions
 
 	// Get channel index from potVar name.
 	// We expect name to be something like "GAINX",
 	// where X is the channel index
 	c = potVar->name[strlen(potVar->name) - 1];
-	ch = &g_channelDescs[c - '0'];
+	chIdx = c - '0';
 
 	vres = vResFromPotValue(potVar->potValue);
+
+	setGlobalChannelGain(chIdx, potVar->potValue);
+
+	potVar->display.prevValuef = potVar->display.valuef;
+	potVar->display.prevSuffix = potVar->display.suffix;
+
+	if (vres >= 1.) {
+		potVar->display.suffix = "V/d";
+		potVar->display.valuef = vres;
+	}
+	else {
+		potVar->display.suffix = "mV/d";
+		potVar->display.valuef = vres * 1000.;
+	}
+
+	drawVar(&potVar->display, VAR_TYPE_FLOAT);
+
+	// Trigger position may change depending on gain, update it
+	drawTriggerArrow(getPotVar("TRIG"), true);
+}
+
+// Set global gain on channel
+bool setGlobalChannelGain(int chIdx, uint32_t potValue)
+{
+	float G = 54.6;	// input gain = Vin/Vout
+	float gain;		// total display gain
+	uint32_t nDiv;	// number of divisions
+	float vres;		// voltage resolution (V/div)
+	CHANNEL_DESC *pChDesc = &g_channelDescs[chIdx];
+
+	if (potValue > ANALOG_MAX_VAL)
+	{
+		Serial.print("Invalid pot value");
+		Serial.println(potValue);
+		return false;
+	}
+
+	vres = vResFromPotValue(potValue);
+
+	Serial.print("Setting VRes ");
+	Serial.print(vres);
+	Serial.print(" V/div on channel ");
+	Serial.println(chIdx);
 
 	nDiv = (g_maxY - g_minY + 1) / VGRID_INTERVAL;
 
@@ -1546,33 +1623,18 @@ void cbPotVarChangedGain(POT_VAR *potVar)
 	gain = G * 3.3 / (float)nDiv / vres;
 
 	if (gain >= 4) {
-		ch->hwGain = 4;
+		pChDesc->hwGain = 4;
 	}
 	else if (gain >= 2) {
-		ch->hwGain = 2;
+		pChDesc->hwGain = 2;
 	}
 	else {
-		ch->hwGain = 1;
+		pChDesc->hwGain = 1;
 	}
-	ch->swGain = (float)gain / (float)ch->hwGain;
-	g_adcDma->SetChannelGain(ch->channel, ch->hwGain);
+	pChDesc->swGain = (float)gain / (float)pChDesc->hwGain;
+	g_adcDma->SetChannelGain(pChDesc->channel, pChDesc->hwGain);
 
-	potVar->display.prevValuef = potVar->display.valuef;
-	potVar->display.prevSuffix = potVar->display.suffix;
-
-	if (vres >= 1.) {
-		potVar->display.suffix = "V/div";
-		potVar->display.valuef = vres;
-	}
-	else {
-		potVar->display.suffix = "mV/div";
-		potVar->display.valuef = vres * 1000.;
-	}
-
-	drawVar(&potVar->display, VAR_TYPE_FLOAT);
-
-    // Trigger position may change depending on gain, update it
-    drawTriggerArrow(getPotVar("TRIG"), true);
+	return true;
 }
 
 void loop()
@@ -1587,7 +1649,7 @@ void loop()
 				 (g_drawState.drawMode == DRAW_MODE_SLOW && g_drawState.mappedFrames > 0) ) {
 				drawEraseSamples(false, true);
 				drawGrid(0, TFT_WIDTH);
-                drawTriggerArrow(getPotVar("TRIG"), true);
+				drawTriggerArrow(getPotVar("TRIG"), true);
 				g_drawState.bNeedsErase = false;
 			}
 		}
@@ -1671,7 +1733,7 @@ void loop()
 		// in slow mode
 		if (g_adcDma->GetCaptureState() == AdcDma::CaptureStateStopped)
 		{
-            PF(true, "Capture is stopped, restarting !\r\n");
+			PF(true, "Capture is stopped, restarting !\r\n");
 			g_adcDma->Start();
 		}
 	}

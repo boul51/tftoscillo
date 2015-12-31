@@ -53,6 +53,7 @@ typedef struct _DRAW_STATE {
 typedef struct _SCOPE_STATE {
 	uint32_t sampleRate;
 	uint32_t triggerChannel;
+	uint32_t prevTriggerChannel;
 	uint32_t triggerVal;
 	uint32_t minTriggerVal;
 	uint32_t maxTriggerVal;
