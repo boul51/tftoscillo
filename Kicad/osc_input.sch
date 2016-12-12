@@ -28,7 +28,7 @@ LIBS:opto
 LIBS:atmel
 LIBS:contrib
 LIBS:valves
-LIBS:osc_input-cache
+LIBS:boul51
 EELAYER 25 0
 EELAYER END
 $Descr A4 11693 8268
@@ -68,7 +68,7 @@ F 3 "~" H 4300 3350 30  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L CAPAPOL C1
+L CP C1
 U 1 1 5521821E
 P 3450 3200
 F 0 "C1" H 3200 3200 40  0000 L CNN
@@ -572,4 +572,8 @@ Wire Wire Line
 	4300 2200 4550 2200
 Wire Wire Line
 	5650 2200 5750 2200
+Wire Wire Line
+	3450 3050 3450 3000
+Wire Wire Line
+	3450 3350 3450 3400
 $EndSCHEMATC

@@ -1,4 +1,4 @@
-update=Mon 12 Dec 2016 05:12:02 PM CET
+update=Mon 12 Dec 2016 05:31:58 PM CET
 version=1
 last_client=kicad
 [general]
@@ -48,7 +48,7 @@ NetIExt=net
 EquName1=devcms
 [eeschema]
 version=1
-LibDir=
+LibDir=${KIUSERMOD}/boul51.lib
 [eeschema/libraries]
 LibName1=power
 LibName2=power
@@ -81,3 +81,4 @@ LibName28=opto
 LibName29=atmel
 LibName30=contrib
 LibName31=valves
+LibName32=boul51
