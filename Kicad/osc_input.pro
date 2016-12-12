@@ -1,4 +1,4 @@
-update=Sat 26 Dec 2015 05:56:44 PM CET
+update=Mon 12 Dec 2016 05:12:02 PM CET
 version=1
 last_client=kicad
 [general]
@@ -81,4 +81,3 @@ LibName28=opto
 LibName29=atmel
 LibName30=contrib
 LibName31=valves
-LibName32=components_sch
