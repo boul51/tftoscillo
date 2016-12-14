@@ -29,6 +29,7 @@ LIBS:atmel
 LIBS:contrib
 LIBS:valves
 LIBS:boul51
+LIBS:osc_input-cache
 EELAYER 26 0
 EELAYER END
 $Descr A4 11693 8268
@@ -87,17 +88,6 @@ F 1 "GND" H 3450 3330 30  0001 C CNN
 F 2 "" H 3450 3400 60  0000 C CNN
 F 3 "" H 3450 3400 60  0000 C CNN
 	1    3450 3400
-	1    0    0    -1  
-$EndComp
-$Comp
-L BC547 Q1
-U 1 1 5521824E
-P 4650 4450
-F 0 "Q1" H 4650 4301 40  0000 R CNN
-F 1 "BC547b" H 4650 4600 40  0000 R CNN
-F 2 "boul51:TO-92_1" H 4550 4552 29  0001 C CNN
-F 3 "" H 4650 4450 60  0000 C CNN
-	1    4650 4450
 	1    0    0    -1  
 $EndComp
 $Comp
@@ -207,7 +197,7 @@ Connection ~ 3900 3700
 Wire Wire Line
 	4300 2200 4300 2100
 Text Notes 750  3000 0    60   ~ 0
--PSPICE \n.include spice_models/1N4007.mod\n.include spice_models/BC547B.mod\n.include spice_models/LM2931A.mod\n.include spice_models/CONN_01x03.mod\n.include spice_models/CONN_01x04.mod\nVIN1 VIN1 GND SIN(0 50 1k)\nVIN2 VIN2 GND SIN(0 50 1k)\nVCC VCC GND 4.83V\n
+.include spice_models/1N4007.mod\n.include spice_models/BC547B.mod\n.include spice_models/LM2931A.mod\n.include spice_models/CONN_01x03.mod\n.include spice_models/CONN_01x04.mod\n.include spice_models/inputs.mod\n.tran 1u 5m 4m
 Text GLabel 4300 4600 3    60   Input ~ 0
 VB1
 Connection ~ 4300 3000
@@ -230,8 +220,6 @@ F 3 "~" H 4300 3950 60  0000 C CNN
 $EndComp
 Wire Wire Line
 	4300 3500 4300 3700
-Connection ~ 4550 2200
-Connection ~ 4300 2200
 Wire Wire Line
 	4750 4750 4950 4750
 $Comp
@@ -242,11 +230,13 @@ F 0 "U1" H 4050 2800 40  0000 C CNN
 F 1 "LM2931A" H 4250 2800 40  0000 L CNN
 F 2 "TO_SOT_Packages_THT:TO-220_Neutral123_Vertical" H 4250 2700 30  0001 C CIN
 F 3 "" H 4250 2600 60  0000 C CNN
+F 4 "X" H 4250 2600 60  0001 C CNN "Spice_Primitive"
+F 5 "LM2931A" H 4250 2600 60  0001 C CNN "Spice_Model"
+F 6 "Y" H 4250 2600 60  0001 C CNN "Spice_Netlist_Enabled"
+F 7 "spice_models/LM2931A.mod" H 4250 2600 60  0001 C CNN "Spice_Lib_File"
 	1    4250 2600
 	0    1    1    0   
 $EndComp
-Wire Wire Line
-	3900 4450 4500 4450
 Connection ~ 3450 3000
 Connection ~ 3450 3400
 Wire Wire Line
@@ -397,7 +387,6 @@ Text GLabel 4750 3000 1    60   Input ~ 0
 VSTABLE
 Wire Wire Line
 	4500 3900 4500 5000
-Connection ~ 4450 4450
 $Comp
 L GND #PWR011
 U 1 1 55241251
@@ -472,7 +461,6 @@ F 3 "" H 5350 1950 60  0000 C CNN
 	1    5350 1950
 	1    0    0    -1  
 $EndComp
-Connection ~ 5350 1950
 Wire Wire Line
 	5450 2300 5750 2300
 Text GLabel 5450 2300 0    60   Input ~ 0
@@ -517,6 +505,10 @@ F 0 "DP1" H 4500 3850 50  0000 C CNN
 F 1 "1N4007" H 4500 3650 50  0000 C CNN
 F 2 "boul51:Diode-DO41" H 4500 3750 60  0001 C CNN
 F 3 "" H 4500 3750 60  0000 C CNN
+F 4 "D" H 4500 3750 60  0001 C CNN "Spice_Primitive"
+F 5 "1n4007" H 4500 3750 60  0001 C CNN "Spice_Model"
+F 6 "Y" H 4500 3750 60  0001 C CNN "Spice_Netlist_Enabled"
+F 7 "spice_models/1N4007.mod" H 4500 3750 60  0001 C CNN "Spice_Lib_File"
 	1    4500 3750
 	0    -1   -1   0   
 $EndComp
@@ -528,6 +520,10 @@ F 0 "DM1" H 4500 5250 50  0000 C CNN
 F 1 "1N4007" H 4500 5050 50  0000 C CNN
 F 2 "boul51:Diode-DO41" H 4500 5150 60  0001 C CNN
 F 3 "" H 4500 5150 60  0000 C CNN
+F 4 "D" H 4500 5150 60  0001 C CNN "Spice_Primitive"
+F 5 "1n4007" H 4500 5150 60  0001 C CNN "Spice_Model"
+F 6 "Y" H 4500 5150 60  0001 C CNN "Spice_Netlist_Enabled"
+F 7 "spice_models/1N4007.mod" H 4500 5150 60  0001 C CNN "Spice_Lib_File"
 	1    4500 5150
 	0    -1   -1   0   
 $EndComp
@@ -548,6 +544,10 @@ F 0 "P1" H 2700 4250 50  0000 C CNN
 F 1 "CONN_01X04" V 2800 4000 50  0000 C CNN
 F 2 "boul51:PinHeader_x4" H 2700 4000 50  0001 C CNN
 F 3 "" H 2700 4000 50  0000 C CNN
+F 4 "X" H 2700 4000 60  0001 C CNN "Spice_Primitive"
+F 5 "CONN_01x04" H 2700 4000 60  0001 C CNN "Spice_Model"
+F 6 "Y" H 2700 4000 60  0001 C CNN "Spice_Netlist_Enabled"
+F 7 "spice_models/CONN_01x04.mod" H 2700 4000 60  0001 C CNN "Spice_Lib_File"
 	1    2700 4000
 	-1   0    0    1   
 $EndComp
@@ -565,6 +565,10 @@ F 0 "P2" H 5950 2500 50  0000 C CNN
 F 1 "CONN_01X03" V 6050 2300 50  0000 C CNN
 F 2 "boul51:PinHeader_x3" H 5950 2300 50  0001 C CNN
 F 3 "" H 5950 2300 50  0000 C CNN
+F 4 "X" H 5950 2300 60  0001 C CNN "Spice_Primitive"
+F 5 "CONN_01x03" H 5950 2300 60  0001 C CNN "Spice_Model"
+F 6 "Y" H 5950 2300 60  0001 C CNN "Spice_Netlist_Enabled"
+F 7 "spice_models/CONN_01x03.mod" H 5950 2300 60  0001 C CNN "Spice_Lib_File"
 	1    5950 2300
 	1    0    0    -1  
 $EndComp
@@ -576,4 +580,23 @@ Wire Wire Line
 	3450 3050 3450 3000
 Wire Wire Line
 	3450 3350 3450 3400
+Connection ~ 4300 2200
+$Comp
+L BC547 Q1
+U 1 1 5521824E
+P 4650 4450
+F 0 "Q1" H 4650 4301 40  0000 R CNN
+F 1 "BC547b" H 4650 4600 40  0000 R CNN
+F 2 "boul51:TO-92_1" H 4550 4552 29  0001 C CNN
+F 3 "" H 4650 4450 60  0000 C CNN
+F 4 "Q" H 4650 4450 60  0001 C CNN "Spice_Primitive"
+F 5 "bc547b" H 4650 4450 60  0001 C CNN "Spice_Model"
+F 6 "Y" H 4650 4450 60  0001 C CNN "Spice_Netlist_Enabled"
+F 7 "spice_models/BC547B.mod" H 4650 4450 60  0001 C CNN "Spice_Lib_File"
+	1    4650 4450
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	3900 4450 4500 4450
+Connection ~ 4450 4450
 $EndSCHEMATC
