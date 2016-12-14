@@ -25,7 +25,7 @@ typedef struct _CHANNEL_DESC {
 	float totalGain;
 	float swGain;
 	uint32_t  hwGain;
-	int gndOffset;
+	int gndOffsets[ADC_DMA_HW_GAINS_COUNT];
 	int bufSize;
 	uint16_t *curSamples;
 	uint16_t *oldSamples;

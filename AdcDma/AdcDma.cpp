@@ -275,20 +275,42 @@ bool AdcDma::SetSampleRate(int sampleRate)
 	return configureTimer();
 }
 
+/**
+ * Gain is set on two bits for each channel.
+ * Possible values are :
+ * 0x0 => Gain = 1
+ * 0x1 => Gain = 1
+ * 0x2 => Gain = 2
+ * 0x3 => Gain = 4
+ **/
+
 bool AdcDma::SetChannelGain(int adcChannel, int gain)
 {
-	if (gain < 1 || gain > 4)
-		return false;
+	uint32_t cgrCh = 0;
+	uint32_t cgrOffset = adcChannel * 2;
 
 	if (adcChannel < 0 || adcChannel > ADC_DMA_MAX_ADC_CHANNEL)
 		return false;
 
-	if (gain == 4)
-		gain = 3;
+	switch (gain)
+	{
+	case 1 :
+		cgrCh = 0x1;
+		break;
+	case 2 :
+		cgrCh = 0x2;
+		break;
+	case 4 :
+		cgrCh = 0x3;
+		break;
+	default :
+		PF(true, "Invalid gain value %d", gain);
+		return false;
+	}
 
 	uint cgr = ADC->ADC_CGR;
-	cgr &= ~(0x3 << (adcChannel*2) );
-	cgr |= (gain << (adcChannel*2) );
+	cgr &= ~(0x3 << cgrOffset);
+	cgr |= (cgrCh << cgrOffset);
 
 	ADC->ADC_CGR = cgr;
 	return true;
@@ -296,19 +318,28 @@ bool AdcDma::SetChannelGain(int adcChannel, int gain)
 
 int AdcDma::GetChannelGain(int adcChannel)
 {
-	uint cgr;
-	uint gain;
+	uint32_t cgrCh;
+	uint32_t cgr;
+	int cgrOffset = adcChannel * 2;
 
 	if (adcChannel < 0 || adcChannel > ADC_DMA_MAX_ADC_CHANNEL)
 		return -1;
 
 	cgr = ADC->ADC_CGR;
+	cgrCh = (cgr >> cgrOffset) & 0x3;
 
-	gain = ((cgr & 0x3) >> adcChannel*2);
-	if (gain == 3)
-		gain = 4;
-
-	return gain;
+	switch (cgrCh)
+	{
+	case 0:
+	case 1:
+		return 1;
+	case 2 :
+		return 2;
+	case 3 :
+		return 4;
+	default :
+		return 0;
+	}
 }
 
 AdcDma::CaptureState AdcDma::GetCaptureState()
@@ -510,6 +541,38 @@ bool AdcDma::deleteBuffers()
 	m_bufSize  = 0;
 
 	return true;
+}
+
+int AdcDma::HwGainAtIndex(int i)
+{
+	switch (i)
+	{
+	case 0 :
+		return 1;
+	case 1 :
+		return 2;
+	case 2 :
+		return 4;
+	default :
+		Serial.println("AdcDma::gainAtIndex: Invalid gain index !");
+		return 1;
+	}
+}
+
+int AdcDma::HwGainIndex(int hwGain)
+{
+	switch (hwGain)
+	{
+	case 1 :
+		return 0;
+	case 2 :
+		return 1;
+	case 4 :
+		return 2;
+	default :
+		Serial.println("AdcDma::gainAtIndex: Invalid gain value !");
+		return 0;
+	}
 }
 
 bool AdcDma::configureAdc(bool bSoftwareTrigger)

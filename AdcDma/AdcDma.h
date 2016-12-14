@@ -21,6 +21,8 @@
 
 #define	ADC_DMA_MAX_MEM			10000
 
+#define ADC_DMA_HW_GAINS_COUNT  3 // Number of available hardware gains (1, 2, 4)
+
 class AdcDma
 {
 
@@ -101,6 +103,9 @@ public :
 	void SetRxHandler(RxCallback rxHandler);
 	bool SetChannelGain(int adcChannel, int gain);
 	int GetChannelGain(int adcChannel);
+	static int HwGainAtIndex(int i);
+	static int HwGainIndex(int hwGain);
+
 private :
 
 	RxCallback m_rxHandler;

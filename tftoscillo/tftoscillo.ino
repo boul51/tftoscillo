@@ -58,6 +58,9 @@
 #define DAC_MIN_FREQ				1
 #define DAC_MAX_FREQ				1000
 
+// Hardware gain used to calibrate
+#define CAL_HW_GAIN 4
+
 int g_zoom = 1;
 
 uint32_t g_frameRate = 0;		// Scope fps
@@ -348,7 +351,11 @@ void setup() {
 		g_channelDescs[i].bufSize = TFT_WIDTH;
 		g_channelDescs[i].swGain = 1.;
 		g_channelDescs[i].hwGain = 1;
-		g_channelDescs[i].gndOffset = 0;
+
+		for (int iGain = 0; iGain < ADC_DMA_HW_GAINS_COUNT; iGain++)
+		{
+			g_channelDescs[i].gndOffsets[iGain] = 0;
+		}
 
 		g_channelDescs[i].r = g_scopeColors[i][0];
 		g_channelDescs[i].g = g_scopeColors[i][1];
@@ -407,32 +414,42 @@ void calChannel(int chIdx)
 	int avgCnt = 30;
 	CHANNEL_DESC *ch;
 	int hwGain;
-	int i;
 
 	ch = &g_channelDescs[chIdx];
 
 	AdcDma::CaptureState state = g_adcDma->GetCaptureState();
 	g_adcDma->Stop();
 
-	// Store gain, we'll disable it to find ground value
+	// Store hardware gain, we'll change it to find ground value
 	hwGain = g_adcDma->GetChannelGain(ch->channel);
-	g_adcDma->SetChannelGain(ch->channel, 4);
-	for (i = 0; i < avgCnt; i++) {
-		g_adcDma->ReadSingleValue(ch->channel, &gndValue);
-		delay(10);
-		avg += (float)gndValue;
+
+	for (int iGain = 0; iGain < ADC_DMA_HW_GAINS_COUNT; iGain++)
+	{
+		avg = 0.;
+		int g = AdcDma::HwGainAtIndex(iGain);
+
+		PF(true, "Setting hwGain %d\r\n", g);
+		g_adcDma->SetChannelGain(ch->channel, g);
+		//g_adcDma->SetChannelGain(ch->channel, CAL_HW_GAIN);
+		for (int i = 0; i < avgCnt; i++) {
+			g_adcDma->ReadSingleValue(ch->channel, &gndValue);
+			delay(10);
+			avg += (float)gndValue;
+		}
+		avg /= (float)avgCnt;
+		gndValue = (uint16_t)avg;
+		//g_adcDma->ReadSingleValue(ch->channel, &gndValue);
+		Serial.print("Got value: ");
+		Serial.println(gndValue);
+
+		//ch->gndOffset = (gndValue - ANALOG_MAX_VAL / 2) / CAL_HW_GAIN;
+		ch->gndOffsets[iGain] = (gndValue - ANALOG_MAX_VAL / 2);
+
+		Serial.print("gndOffset: ");
+		Serial.println(ch->gndOffsets[iGain]);
 	}
-	avg /= (float)avgCnt;
-	gndValue = (uint16_t)avg;
-	//g_adcDma->ReadSingleValue(ch->channel, &gndValue);
+
 	g_adcDma->SetChannelGain(ch->channel, hwGain);
-	Serial.print("Got value: ");
-	Serial.println(gndValue);
-
-	ch->gndOffset = (gndValue - ANALOG_MAX_VAL / 2);
-
-	Serial.print("gndOffset: ");
-	Serial.println(ch->gndOffset);
 
 	if (state == AdcDma::CaptureStateStarted) {
 		g_adcDma->Start();
@@ -537,7 +554,7 @@ void channelGainHandler()
 
 	gain = atoi(strGain);
 
-	setGlobalChannelGain(chIdx, gain);
+	setChannelGlobalGain(chIdx, gain);
 }
 
 void freqRangeHandler()
@@ -733,6 +750,12 @@ inline int getChannelIndex(int adcChannel)
 	return 0;
 }
 
+int groundOffsetForChannel(CHANNEL_DESC *pChDesc)
+{
+	int gainIdx = AdcDma::HwGainIndex(pChDesc->hwGain);
+	return pChDesc->gndOffsets[gainIdx];
+}
+
 void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 {
 	uint16_t rawSample;
@@ -759,7 +782,6 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 
 			PF(false, "Got channel %d, sample %d\r\n", channel, sample);
 
-			/*
 			if (iFrame == 0) {
 				Serial.print("Channel ");
 				Serial.print(channel);
@@ -768,11 +790,11 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 				Serial.print(", sample ");
 				Serial.println(sample);
 			}
-			*/
 
 			channelDesc = getChannelDesc(channel);
 
-			sample -= channelDesc->hwGain * channelDesc->gndOffset / 4;
+			//sample -= channelDesc->hwGain * channelDesc->gndOffset;
+			sample -= groundOffsetForChannel(channelDesc);
 
 			float gain = channelDesc->swGain;
 			if (gain != 1.) {
@@ -835,7 +857,8 @@ void drawTriggerArrow(POT_VAR *potVar, bool bErase)
 
 	gain = ch->swGain;
 
-    potVar->display.value = (uint32_t)((float)((int)potVar->potValue - ch->gndOffset * (int)ch->hwGain / 4)*
+	int gndOffset = groundOffsetForChannel(ch);
+	potVar->display.value = (uint32_t)((float)((int)potVar->potValue - gndOffset)*
 								   gain - (gain - 1.) *
 								   (float)SAMPLE_MAX_VAL / 2.);
 
@@ -1147,8 +1170,6 @@ bool computeFrameRate()
 		s_prevSec = sec;
 		g_fpsVarDisplay.prevValue = g_fpsVarDisplay.value;
 		g_fpsVarDisplay.value = s_loops;
-		// Debug
-		g_fpsVarDisplay.value = g_channelDescs[0].gndOffset;
 		if (g_fpsVarDisplay.prevValue != g_fpsVarDisplay.value) {
 			g_fpsVarDisplay.bNeedsErase = true;
 			bRet = true;
@@ -1567,7 +1588,7 @@ void cbPotVarChangedGain(POT_VAR *potVar)
 
 	vres = vResFromPotValue(potVar->potValue);
 
-	setGlobalChannelGain(chIdx, potVar->potValue);
+	setChannelGlobalGain(chIdx, potVar->potValue);
 
 	potVar->display.prevValuef = potVar->display.valuef;
 	potVar->display.prevSuffix = potVar->display.suffix;
@@ -1588,7 +1609,7 @@ void cbPotVarChangedGain(POT_VAR *potVar)
 }
 
 // Set global gain on channel
-bool setGlobalChannelGain(int chIdx, uint32_t potValue)
+bool setChannelGlobalGain(int chIdx, uint32_t potValue)
 {
 	float G = 54.6;	// input gain = Vin/Vout
 	float gain;		// total display gain
@@ -1632,6 +1653,9 @@ bool setGlobalChannelGain(int chIdx, uint32_t potValue)
 		pChDesc->hwGain = 1;
 	}
 	pChDesc->swGain = (float)gain / (float)pChDesc->hwGain;
+
+	PF(true, "Channel %d, setting hwGain %d, swGain %f\r\n", chIdx, pChDesc->hwGain, pChDesc->swGain);
+
 	g_adcDma->SetChannelGain(pChDesc->channel, pChDesc->hwGain);
 
 	return true;
