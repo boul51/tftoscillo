@@ -18,11 +18,11 @@ void LibDbg::pf(bool doPrint, const char *caller, const char *fmt, ... )
 	va_end (args);
 
 	if (caller) {
-		Serial.print(caller);
-		Serial.print(": ");
+        SERIAL_IFACE.print(caller);
+        SERIAL_IFACE.print(": ");
 	}
 
-	Serial.print(buf);
+    SERIAL_IFACE.print(buf);
 }
 
 char * LibDbg::F2S(float f, int precision)

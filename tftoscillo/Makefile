@@ -2,22 +2,30 @@ export BINDIR="$(PWD)/bin"
 export LIBDIR="$(PWD)/../lib"
 export BINFILE=$(BINDIR)/tftoscillo.ino.bin
 
-export FQBN:="arduino:sam:arduino_due_x"
-export DEBUG_CMD:=tail -f
+export FQBN ?= "arduino:sam:arduino_due_x"
+export DEBUG_CMD ?= minicom -D
+
+# Define SERIAL_IFACE to:
+# - Serial to use programming port (near the power supply connector)
+# - SerialUSB to use native port (near the reset button)
+# Native port is faster to upload the program, but seems to get unavailable after a program crash
+
+export SERIAL_IFACE ?= SerialUSB
 
 all: build
 
 build:
 	arduino-cli compile tftoscillo \
 		--verbose \
-		--fqbn arduino:sam:arduino_due_x \
+		--fqbn $(FQBN) \
 		--warnings all \
-		--build-property 'compiler.cpp.extra_flags=-DSERIALCOMMAND_HARDWAREONLY' \
+		--build-property 'compiler.cpp.extra_flags=-DSERIALCOMMAND_HARDWAREONLY -DSERIAL_IFACE=$(SERIAL_IFACE)' \
 		--library "$(LIBDIR)/AdcDma" \
 		--library "$(LIBDIR)/ArduinoSerialCommand" \
 		--library "$(LIBDIR)/GenSigDma" \
 		--library "$(LIBDIR)/LibDbg" \
 		--library "$(LIBDIR)/TFT" \
+		--library "$(LIBDIR)/Arduino-PrintStream" \
 		--output-dir $(BINDIR)
 
 run:
@@ -36,6 +44,7 @@ run:
 	echo "Starting upload"; \
 	arduino-cli upload --fqbn $(FQBN) --port $$SERIALPORT --input-file $(BINFILE); \
 	echo "Starting command $(DEBUG_CMD) $$SERIALPORT, use DEBUG_CMD env variable to override"; \
+	sleep 0.5; \
 	$(DEBUG_CMD) $$SERIALPORT
 
 clean:

@@ -10,3 +10,6 @@
 [submodule "lib/TFT"]
 	path = lib/TFT
 	url = https://github.com/arduino-libraries/TFT.git
+[submodule "lib/Arduino-PrintStream"]
+	path = lib/Arduino-PrintStream
+	url = https://github.com/boul51/Arduino-PrintStream.git

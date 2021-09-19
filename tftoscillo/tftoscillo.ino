@@ -8,10 +8,15 @@
 #include <GenSigDma.h>
 #include <AdcDma.h>
 #include <LibDbg.h>
+#include <PrintStream.h>
 
 #include "tftoscillo.h"
 
 /**** DEFINES ****/
+
+#ifndef SERIAL_IFACE
+#error "Please define SERIAL_IFACE to Serial (programming port) or SerialUSB (native port)"
+#endif
 
 // TFT screen definitions
 #define TFT_WIDTH   160		// Screen width
@@ -341,7 +346,11 @@ VAR_DISPLAY g_fpsVarDisplay =
 
 void setup() {
 
-	Serial.begin(115200);
+    SERIAL_IFACE.begin(115200);
+
+    while (!SERIAL_IFACE) {}
+
+    SERIAL_IFACE.println("Entering setup");
 
 	g_channelDescs = (CHANNEL_DESC *)malloc(DIMOF(g_scopeChannels) * sizeof(CHANNEL_DESC));
 
@@ -405,6 +414,8 @@ void setup() {
 
 	// Auto calibrate first channel
 	calChannel(0);
+
+	SERIAL_IFACE.println("Setup done, starting !");
 }
 
 void calChannel(int chIdx)
@@ -439,14 +450,9 @@ void calChannel(int chIdx)
 		avg /= (float)avgCnt;
 		gndValue = (uint16_t)avg;
 		//g_adcDma->ReadSingleValue(ch->channel, &gndValue);
-		Serial.print("Got value: ");
-		Serial.println(gndValue);
 
 		//ch->gndOffset = (gndValue - ANALOG_MAX_VAL / 2) / CAL_HW_GAIN;
 		ch->gndOffsets[iGain] = (gndValue - ANALOG_MAX_VAL / 2);
-
-		Serial.print("gndOffset: ");
-		Serial.println(ch->gndOffsets[iGain]);
 	}
 
 	g_adcDma->SetChannelGain(ch->channel, hwGain);
@@ -458,7 +464,7 @@ void calChannel(int chIdx)
 
 void defaultHandler()
 {
-	Serial.println("Invalid command received\n");
+	SERIAL_IFACE.println("Invalid command received\n");
 }
 
 void zoomHandler()
@@ -468,7 +474,7 @@ void zoomHandler()
 	strZoom = SCmd.next();
 
 	if (strZoom == NULL) {
-		Serial.println(g_zoom);
+	SERIAL_IFACE.println(g_zoom);
 		return;
 	}
 
@@ -483,17 +489,17 @@ void calHandler()
 	strCh = SCmd.next();
 
 	if (strCh == NULL) {
-		Serial.println("calHandler: expecting channel index argument");
+	SERIAL_IFACE.println("calHandler: expecting channel index argument");
 		return;
 	}
 
-    chIdx = (uint32_t)atoi(strCh);
+	chIdx = (uint32_t)atoi(strCh);
 
-	Serial.print("Got channel index ");
-	Serial.println(chIdx);
+	SERIAL_IFACE.print("Got channel index ");
+	SERIAL_IFACE.println(chIdx);
 
 	if (chIdx >= DIMOF(g_scopeChannels)) {
-		Serial.println("calHandler: invalid channel");
+	SERIAL_IFACE.println("calHandler: invalid channel");
 		return;
 	}
 
@@ -508,15 +514,15 @@ void channelCountHandler()
 	strCh = SCmd.next();
 
 	if (strCh == NULL) {
-		Serial.println(g_scopeState.scopeChannelsCount);
+	SERIAL_IFACE.println(g_scopeState.scopeChannelsCount);
 		return;
 	}
 
 	chCnt = atoi(strCh);
 
 	if (chCnt <= 0 || chCnt > (int)DIMOF(g_scopeChannels)) {
-		Serial.print("Invalid channels count ");
-		Serial.println(chCnt);
+		SERIAL_IFACE.print("Invalid channels count ");
+		SERIAL_IFACE.println(chCnt);
 		return;
 	}
 
@@ -532,23 +538,23 @@ void channelGainHandler()
 	strCh = SCmd.next();
 
 	if (strCh == NULL) {
-		Serial.println("Missing channel argument for gain command");
+		SERIAL_IFACE.println("Missing channel argument for gain command");
 		return;
 	}
 
 	chIdx = atoi(strCh);
 	if (chIdx < 0 || chIdx > ADC_DMA_MAX_ADC_CHANNEL) {
-		Serial.println("Invalid channel");
+		SERIAL_IFACE.println("Invalid channel");
 		return;
 	}
 
 	strGain = SCmd.next();
 
 	if (strGain == NULL) {
-		Serial.print("Gain for channel ");
-		Serial.print(chIdx);
-		Serial.print(": ");
-		Serial.println(g_adcDma->GetChannelGain(chIdx));
+		SERIAL_IFACE.print("Gain for channel ");
+		SERIAL_IFACE.print(chIdx);
+		SERIAL_IFACE.print(": ");
+		SERIAL_IFACE.println(g_adcDma->GetChannelGain(chIdx));
 		return;
 	}
 
@@ -568,12 +574,12 @@ void freqRangeHandler()
 
 	strRangeStart = SCmd.next();
 	if (strRangeStart == NULL) {
-		Serial.print(g_sigState.freq);
-		Serial.print(" (");
-		Serial.print(g_sigState.minFreq);
-		Serial.print(" - ");
-		Serial.print(g_sigState.maxFreq);
-		Serial.println(")");
+	SERIAL_IFACE.print(g_sigState.freq);
+	SERIAL_IFACE.print(" (");
+	SERIAL_IFACE.print(g_sigState.minFreq);
+	SERIAL_IFACE.print(" - ");
+	SERIAL_IFACE.print(g_sigState.maxFreq);
+	SERIAL_IFACE.println(")");
 		return;
 	}
 
@@ -605,11 +611,11 @@ void triggerModeHandler()
 	if (strMode == NULL) {
 		switch (g_triggerMode) {
 		case AdcDma::RisingEdge :
-			Serial.println("rising");
+			SERIAL_IFACE.println("rising");
 			break;
 
 		case AdcDma::FallingEdge :
-			Serial.println("falling");
+			SERIAL_IFACE.println("falling");
 			break;
 
 		default :
@@ -641,13 +647,13 @@ void triggerChannelHandler()
 	strCh = SCmd.next();
 
 	if (strCh == NULL) {
-		Serial.println("Missing channel argument for trigger channel command");
+	SERIAL_IFACE.println("Missing channel argument for trigger channel command");
 		return;
 	}
 
 	chIdx = atoi(strCh);
 	if (chIdx < 0 || chIdx > ADC_DMA_MAX_ADC_CHANNEL) {
-		Serial.println("Invalid channel");
+	SERIAL_IFACE.println("Invalid channel");
 		return;
 	}
 
@@ -664,16 +670,16 @@ void formHandler()
 	if (strForm == NULL) {
 		switch (g_sigState.waveform) {
 		case GenSigDma::WaveFormSaw :
-			Serial.println("saw");
+			SERIAL_IFACE.println("saw");
 			break;
 		case GenSigDma::WaveFormSinus :
-			Serial.println("sinus");
+			SERIAL_IFACE.println("sinus");
 			break;
 		case GenSigDma::WaveFormSquare :
-			Serial.println("square");
+			SERIAL_IFACE.println("square");
 			break;
 		case GenSigDma::WaveFormTriangle :
-			Serial.println("triangle");
+			SERIAL_IFACE.println("triangle");
 			break;
 		default :
 			break;
@@ -707,22 +713,22 @@ void blHandler()
 	int blVal;
 
 	if (strBl == NULL) {
-		Serial.print(g_scopeState.blVal);
-		Serial.println("");
+		SERIAL_IFACE.print(g_scopeState.blVal);
+		SERIAL_IFACE.println("");
 		return;
 	}
 
 	blVal = atol(strBl);
 
 	if (blVal < 0 || blVal > 100) {
-		Serial.print("Invalid backlight value ");
-		Serial.println(blVal);
+		SERIAL_IFACE.print("Invalid backlight value ");
+		SERIAL_IFACE.println(blVal);
 		return;
 	}
 
 	g_scopeState.blVal = blVal;
-	Serial.print("Setting backlight value: ");
-	Serial.println(blVal);
+	SERIAL_IFACE.print("Setting backlight value: ");
+	SERIAL_IFACE.println(blVal);
 
 	blVal = map(blVal, 100, 0, 0, ANALOG_MAX_VAL);
 	analogWrite(TFT_BL_PIN, blVal);
@@ -1610,17 +1616,12 @@ bool setChannelGlobalGain(int chIdx, uint32_t potValue)
 
 	if (potValue > ANALOG_MAX_VAL)
 	{
-		Serial.print("Invalid pot value");
-		Serial.println(potValue);
+		SERIAL_IFACE.print("Invalid pot value");
+		SERIAL_IFACE.println(potValue);
 		return false;
 	}
 
 	vres = vResFromPotValue(potValue);
-
-	Serial.print("Setting VRes ");
-	Serial.print(vres);
-	Serial.print(" V/div on channel ");
-	Serial.println(chIdx);
 
 	nDiv = (g_maxY - g_minY + 1) / VGRID_INTERVAL;
 

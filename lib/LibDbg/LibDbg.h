@@ -1,9 +1,11 @@
 #ifndef _LIBDBG_H_
 #define _LIBDBG_H_
 
-// Set to 0 to disable debug
-// Set to 1 to enable debug
-#define LIBDBG_ENABLE	0
+// Set LIBDBG_ENABLE to 1 to enable debug
+
+#ifndef SERIAL_IFACE
+#error "Please define SERIAL_IFACE to Serial (programming port) or SerialUSB (native port)"
+#endif
 
 class LibDbg
 {
