@@ -12,6 +12,7 @@ build:
 		--verbose \
 		--fqbn arduino:sam:arduino_due_x \
 		--warnings all \
+		--build-property 'compiler.cpp.extra_flags=-DSERIALCOMMAND_HARDWAREONLY' \
 		--library "$(LIBDIR)/AdcDma" \
 		--library "$(LIBDIR)/ArduinoSerialCommand" \
 		--library "$(LIBDIR)/GenSigDma" \
