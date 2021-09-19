@@ -1,0 +1,12 @@
+[submodule "ArduinoSerialCommand"]
+	path = lib/ArduinoSerialCommand
+	url = https://github.com/scogswell/ArduinoSerialCommand.git
+[submodule "TFT"]
+	path = lib/TFT
+	url = https://github.com/arduino-libraries/TFT.git
+[submodule "lib/ArduinoSerialCommand"]
+	path = lib/ArduinoSerialCommand
+	url = https://github.com/scogswell/ArduinoSerialCommand.git
+[submodule "lib/TFT"]
+	path = lib/TFT
+	url = https://github.com/arduino-libraries/TFT.git

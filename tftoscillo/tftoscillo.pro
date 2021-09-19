@@ -3,24 +3,43 @@ CONFIG += console
 CONFIG -= app_bundle
 CONFIG -= qt
 
-include(prefs.mk)
+!exists(tftoscillo.pri) {
+    warning("tftoscillo.pri, source completion will failed to find arduino include files")
+    warning("Please create a tftoscillo.pri file, with the following directive, adjusted to your sam version:")
+    warning("SAMDIR=$(HOME)/.arduino15/packages/arduino/hardware/sam/1.6.12/")
+}
 
-INCLUDEPATH += ../GenSigDma \
-               ../AdcDma \
-               ../LibDbg \
-               ../ArduinoSerialCommand \
-               $$SAM_DIR/packages/arduino/hardware/sam/1.6.6/cores/arduino \
-               $$SAM_DIR/packages/arduino/hardware/sam/1.6.6/libraries/SPI \
-               $$SAM_DIR/packages/arduino/hardware/sam/1.6.6/variants/arduino_due_x \
-               $$ARDUINO_DIR/libraries/TFT/src
+!isEmpty(SAMDIR):!exists($$SAMDIR) {
+    error("$$SAMDIR does not exist")
+}
 
-HEADERS += ../GenSigDma/*.h \
-           ../AdcDma/*.h \
-           ../LibDbg/*.h \
-           ../ArduinoSerialCommand/*.h
+LIBDIR=$${PWD}/../lib
 
-SOURCES += tftoscillo.ino \
-           ../GenSigDma/*.cpp \
-           ../AdcDma/*.cpp \
-           ../LibDbg/*.cpp \
-           ../ArduinoSerialCommand/*.cpp
+INCLUDEPATH += \
+    $${SAMDIR}/cores/arduino \
+    $${SAMDIR}/libraries/SPI \
+    $${SAMDIR}/variants/arduino_due_x \
+    $${LIBDIR}/GenSigDma \
+    $${LIBDIR}/AdcDma \
+    $${LIBDIR}/LibDbg \
+    $${LIBDIR}/ArduinoSerialCommand \
+    $${LIBDIR}/TFT/src \
+
+HEADERS += \
+    $${LIBDIR}/GenSigDma/*.h \
+    $${LIBDIR}/AdcDma/*.h \
+    $${LIBDIR}/LibDbg/*.h \
+    $${LIBDIR}/ArduinoSerialCommand/*.h \
+    $${LIBDIR}/TFT/src/*.h \
+
+SOURCES += \
+    tftoscillo.ino \
+    $${LIBDIR}/GenSigDma/*.cpp \
+    $${LIBDIR}/AdcDma/*.cpp \
+    $${LIBDIR}/LibDbg/*.cpp \
+    $${LIBDIR}/ArduinoSerialCommand/*.cpp \
+    $${LIBDIR}/TFT/src/*.cpp \
+
+OTHER_FILES += \
+    Makefile \
+    tftoscillo.pri \

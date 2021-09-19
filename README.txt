@@ -1,5 +1,12 @@
-To use build.sh and run.sh scripts :
-Modify ARDUINO_DIR in prefs.mk to point to your arduino installation directory
+This project is meant to make a pocket oscillator from an Arduino Due board along with a TFT screen.
+
+To build,clean and run the project,
+use associated Makefile targets in tftoscillo subfolder
+
+You must have arduino-cli in your path (available from https://github.com/arduino/arduino-cli.git)
+
+Note: Arduino IDE cannot be used to build the project because the libraries are not in the standard path.
+If you want to use Arduino IDE, add links to the folders in lib folder in your ~/Arduino/libraries folder.
 
 To edit project in qtCreator :
  - cd tftoscillo
@@ -7,20 +14,8 @@ To edit project in qtCreator :
  - select at least one kit in "Configure Project"
  - in build settings:
    - disable shadow build
-   - remove all build steps and add a new custom step with command build.sh
-   - remove all clean steps and add a new custom step with command clean.sh
  - in run settings:
    - add a run configuration (custom executable)
    - set run.sh for executable name
- - build and run commands should then be available
 
 You should then be able to build and run the project from qtcreator
-
-Tips:
-
-To disable verification after upload, modify the file
-~/.arduino15/packages/arduino/hardware/sam/1.6.6/platform.txt
-to remove the -v option in the upload.pattern line :
-tools.bossac.upload.pattern="{path}/{cmd}" {upload.verbose} --port={serial.port.file} -U {upload.native_usb} -e -w -v -b "{build.path}/{build.project_name}.bin" -R
-becomes
-tools.bossac.upload.pattern="{path}/{cmd}" {upload.verbose} --port={serial.port.file} -U {upload.native_usb} -e -w -b "{build.path}/{build.project_name}.bin" -R
