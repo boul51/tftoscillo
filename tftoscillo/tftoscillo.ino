@@ -782,15 +782,6 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 
 			PF(false, "Got channel %d, sample %d\r\n", channel, sample);
 
-			if (iFrame == 0) {
-				Serial.print("Channel ");
-				Serial.print(channel);
-				Serial.print(", rawSample ");
-				Serial.print(rawSample);
-				Serial.print(", sample ");
-				Serial.println(sample);
-			}
-
 			channelDesc = getChannelDesc(channel);
 
 			//sample -= channelDesc->hwGain * channelDesc->gndOffset;
