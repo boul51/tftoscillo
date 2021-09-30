@@ -1,5 +1,5 @@
-export BINDIR="$(PWD)/bin"
-export LIBDIR="$(PWD)/../lib"
+export BINDIR="$(CURDIR)/bin"
+export LIBDIR="$(CURDIR)/../lib"
 export BINFILE=$(BINDIR)/tftoscillo.ino.bin
 
 export FQBN ?= "arduino:sam:arduino_due_x"
