@@ -19,7 +19,7 @@ build:
 		--verbose \
 		--fqbn $(FQBN) \
 		--warnings all \
-		--build-property 'compiler.cpp.extra_flags=-DSERIALCOMMAND_HARDWAREONLY -DSERIAL_IFACE=$(SERIAL_IFACE)' \
+		--build-property 'compiler.cpp.extra_flags=-Wall -DSERIALCOMMAND_HARDWAREONLY -DSERIAL_IFACE=$(SERIAL_IFACE)' \
 		--library "$(LIBDIR)/AdcDma" \
 		--library "$(LIBDIR)/ArduinoSerialCommand" \
 		--library "$(LIBDIR)/GenSigDma" \
