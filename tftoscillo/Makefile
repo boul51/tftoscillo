@@ -12,6 +12,8 @@ export DEBUG_CMD ?= minicom -D
 
 export SERIAL_IFACE ?= SerialUSB
 
+export LIBDBG_ENABLE ?= 0
+
 all: build
 
 build:
@@ -19,7 +21,7 @@ build:
 		--verbose \
 		--fqbn $(FQBN) \
 		--warnings all \
-		--build-property 'compiler.cpp.extra_flags=-Wall -DSERIALCOMMAND_HARDWAREONLY -DSERIAL_IFACE=$(SERIAL_IFACE)' \
+		--build-property 'compiler.cpp.extra_flags=-Wall -DSERIALCOMMAND_HARDWAREONLY -DSERIAL_IFACE=$(SERIAL_IFACE) -DLIBDBG_ENABLE=$(LIBDBG_ENABLE)' \
 		--library "$(LIBDIR)/AdcDma" \
 		--library "$(LIBDIR)/ArduinoSerialCommand" \
 		--library "$(LIBDIR)/GenSigDma" \
