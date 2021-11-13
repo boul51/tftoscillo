@@ -738,10 +738,12 @@ void blHandler()
 
 inline CHANNEL_DESC *getChannelDesc(int channel)
 {
-    for (uint32_t i = 0; i < DIMOF(g_scopeChannels); i++) {
+	for (uint32_t i = 0; i < DIMOF(g_scopeChannels); i++) {
 		if (g_channelDescs[i].channel == channel)
 			return &g_channelDescs[i];
 	}
+
+	PF(true, "No channel matching %d\r\n", channel);
 
 	return NULL;
 }
@@ -789,6 +791,11 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 			PF(false, "Got channel %d, sample %d\r\n", channel, sample);
 
 			channelDesc = getChannelDesc(channel);
+
+			if (!channelDesc) {
+				PF(true, "No channel desc found for channel %d (raw sample 0x%04x) !\r\n", channel, rawSample);
+				continue;
+			}
 
 			//sample -= channelDesc->hwGain * channelDesc->gndOffset;
 			sample -= groundOffsetForChannel(channelDesc);
