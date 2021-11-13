@@ -743,8 +743,6 @@ inline CHANNEL_DESC *getChannelDesc(int channel)
 			return &g_channelDescs[i];
 	}
 
-	PF(true, "No channel matching %d\n", channel);
-
 	return NULL;
 }
 
@@ -790,28 +788,22 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 
 			PF(false, "Got channel %d, sample %d\n", channel, sample);
 
-			channelDesc = getChannelDesc(channel);
+			// We have samples for input channels, but also for potentiometers, so channelDesc may be null
+			if ((channelDesc = getChannelDesc(channel))) {
 
-			if (!channelDesc) {
-				PF(true, "No channel desc found for channel %d (raw sample 0x%04x) !\n", channel, rawSample);
-				continue;
-			}
+				sample -= groundOffsetForChannel(channelDesc);
 
-			//sample -= channelDesc->hwGain * channelDesc->gndOffset;
-			sample -= groundOffsetForChannel(channelDesc);
+				float gain = channelDesc->swGain;
+				if (gain != 1.) {
+					scaledSample = (uint32_t)((float)sample * gain - (gain - 1.) *
+											  (float)SAMPLE_MAX_VAL / 2.);
+					if (scaledSample < 0)
+						scaledSample = 0;
+					if (scaledSample > SAMPLE_MAX_VAL)
+						scaledSample = SAMPLE_MAX_VAL;
+					sample = scaledSample;
+				}
 
-			float gain = channelDesc->swGain;
-			if (gain != 1.) {
-                scaledSample = (uint32_t)((float)sample * gain - (gain - 1.) *
-						(float)SAMPLE_MAX_VAL / 2.);
-				if (scaledSample < 0)
-					scaledSample = 0;
-				if (scaledSample > SAMPLE_MAX_VAL)
-					scaledSample = SAMPLE_MAX_VAL;
-				sample = scaledSample;
-			}
-
-			if (channelDesc) {
 				mappedVal = map(sample, 0, SAMPLE_MAX_VAL, g_maxY - 1, g_minY);
 				channelDesc->curSamples[iFrame + frameOffset] = mappedVal;
 			}
