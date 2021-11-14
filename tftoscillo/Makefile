@@ -28,6 +28,7 @@ build:
 		--library "$(LIBDIR)/LibDbg" \
 		--library "$(LIBDIR)/TFT" \
 		--library "$(LIBDIR)/Arduino-PrintStream" \
+		--library "$(LIBDIR)/MemoryFree" \
 		--output-dir $(BINDIR)
 
 run:

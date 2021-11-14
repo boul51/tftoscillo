@@ -13,3 +13,6 @@
 [submodule "lib/Arduino-PrintStream"]
 	path = lib/Arduino-PrintStream
 	url = https://github.com/boul51/Arduino-PrintStream.git
+[submodule "lib/MemoryFree"]
+	path = lib/MemoryFree
+	url = https://github.com/mpflaga/Arduino-MemoryFree.git

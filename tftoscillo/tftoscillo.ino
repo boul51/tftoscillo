@@ -9,6 +9,7 @@
 #include <AdcDma.h>
 #include <LibDbg.h>
 #include <PrintStream.h>
+#include <MemoryFree.h>
 
 #include "tftoscillo.h"
 
@@ -350,7 +351,7 @@ void setup() {
 
     while (!SERIAL_IFACE) {}
 
-    SERIAL_IFACE.println("Entering setup");
+	PF(true, "Entering setup, available memory %d\n", freeMemory());
 
 	g_channelDescs = (CHANNEL_DESC *)malloc(DIMOF(g_scopeChannels) * sizeof(CHANNEL_DESC));
 
@@ -415,7 +416,7 @@ void setup() {
 	// Auto calibrate first channel
 	calChannel(0);
 
-	SERIAL_IFACE.println("Setup done, starting !");
+	PF(true, "Setup done, starting, available memory %d !", freeMemory());
 }
 
 void calChannel(int chIdx)

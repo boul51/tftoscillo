@@ -25,6 +25,7 @@ INCLUDEPATH += \
     $${LIBDIR}/ArduinoSerialCommand \
     $${LIBDIR}/TFT/src \
     $${LIBDIR}/Arduino-PrintStream/src \
+    $${LIBDIR}/MemoryFree \
 
 HEADERS += \
     $${LIBDIR}/GenSigDma/*.h \
@@ -33,6 +34,7 @@ HEADERS += \
     $${LIBDIR}/ArduinoSerialCommand/*.h \
     $${LIBDIR}/TFT/src/*.h \
     $${LIBDIR}/Arduino-PrintStream/src/*.h \
+    $${LIBDIR}/MemoryFree/*.h \
 
 SOURCES += \
     tftoscillo.ino \
@@ -42,6 +44,7 @@ SOURCES += \
     $${LIBDIR}/ArduinoSerialCommand/*.cpp \
     $${LIBDIR}/TFT/src/*.cpp \
     $${LIBDIR}/Arduino-PrintStream/src/*.cpp \
+    $${LIBDIR}/MemoryFree/*.cpp \
 
 OTHER_FILES += \
     Makefile \
