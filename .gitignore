@@ -1,3 +1,5 @@
 tftoscillo/tftoscillo.pro.user*
+tftoscillo/compile_commands.json
+tftoscillo/.cache
 build*
 bin*
