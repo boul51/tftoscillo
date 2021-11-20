@@ -31,6 +31,8 @@ build:
 		--library "$(LIBDIR)/MemoryFree" \
 		--library "$(LIBDIR)/OscDisplay" \
 		--library "$(LIBDIR)/OscDisplayDriver" \
+		--library "$(LIBDIR)/arduino-logger" \
+		--library "$(LIBDIR)/arduino-printf" \
 		--output-dir $(BINDIR)
 
 run:
