@@ -16,3 +16,9 @@
 [submodule "lib/MemoryFree"]
 	path = lib/MemoryFree
 	url = https://github.com/mpflaga/Arduino-MemoryFree.git
+[submodule "lib/OscDisplay"]
+	path = lib/OscDisplay
+	url = https://github.com/boul51/OscDisplay.git
+[submodule "lib/OscDisplayDriver"]
+	path = lib/OscDisplayDriver
+	url = https://github.com/boul51/OscDisplayDriver.git

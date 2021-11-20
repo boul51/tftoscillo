@@ -22,6 +22,8 @@ INCLUDEPATH += \
     $${LIBDIR}/GenSigDma \
     $${LIBDIR}/AdcDma \
     $${LIBDIR}/LibDbg \
+    $${LIBDIR}/OscDisplay \
+    $${LIBDIR}/OscDisplayDriver \
     $${LIBDIR}/ArduinoSerialCommand \
     $${LIBDIR}/TFT/src \
     $${LIBDIR}/Arduino-PrintStream/src \
@@ -31,6 +33,8 @@ HEADERS += \
     $${LIBDIR}/GenSigDma/*.h \
     $${LIBDIR}/AdcDma/*.h \
     $${LIBDIR}/LibDbg/*.h \
+    $${LIBDIR}/OscDisplay/*.h \
+    $${LIBDIR}/OscDisplayDriver/*.h \
     $${LIBDIR}/ArduinoSerialCommand/*.h \
     $${LIBDIR}/TFT/src/*.h \
     $${LIBDIR}/Arduino-PrintStream/src/*.h \
@@ -41,6 +45,8 @@ SOURCES += \
     $${LIBDIR}/GenSigDma/*.cpp \
     $${LIBDIR}/AdcDma/*.cpp \
     $${LIBDIR}/LibDbg/*.cpp \
+    $${LIBDIR}/OscDisplay/*.cpp \
+    $${LIBDIR}/OscDisplayDriver/*.cpp \
     $${LIBDIR}/ArduinoSerialCommand/*.cpp \
     $${LIBDIR}/TFT/src/*.cpp \
     $${LIBDIR}/Arduino-PrintStream/src/*.cpp \

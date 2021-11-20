@@ -29,6 +29,8 @@ build:
 		--library "$(LIBDIR)/TFT" \
 		--library "$(LIBDIR)/Arduino-PrintStream" \
 		--library "$(LIBDIR)/MemoryFree" \
+		--library "$(LIBDIR)/OscDisplay" \
+		--library "$(LIBDIR)/OscDisplayDriver" \
 		--output-dir $(BINDIR)
 
 run:

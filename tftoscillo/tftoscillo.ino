@@ -11,6 +11,9 @@
 #include <PrintStream.h>
 #include <MemoryFree.h>
 
+#include "oscdisplay.h"
+#include "robotlcdoscdisplaydriver.h"
+
 #include "tftoscillo.h"
 
 /**** DEFINES ****/
@@ -84,6 +87,8 @@ AdcDma::TriggerMode g_triggerMode = AdcDma::RisingEdge;
 // Pointer on GenSigDma object
 GenSigDma *g_genSigDma = NULL;
 AdcDma *g_adcDma = NULL;
+
+nboul::oscdisplay::OscDisplay* m_display = nullptr;
 
 SerialCommand SCmd;
 
@@ -352,6 +357,9 @@ void setup() {
     while (!SERIAL_IFACE) {}
 
 	PF(true, "Entering setup, available memory %d\n", freeMemory());
+
+	auto driver = new nboul::oscdisplaydriver::RobotLcdDisplayDriver();
+	m_display = new nboul::oscdisplay::OscDisplay(TFT_WIDTH, TFT_HEIGHT, driver);
 
 	g_channelDescs = (CHANNEL_DESC *)malloc(DIMOF(g_scopeChannels) * sizeof(CHANNEL_DESC));
 
