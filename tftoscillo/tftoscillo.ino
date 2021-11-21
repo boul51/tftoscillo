@@ -2,7 +2,6 @@
 
 #include <SerialCommand.h>
 
-#include <SPI.h>
 #include <TFT.h>  // Arduino LCD library
 
 #include <GenSigDma.h>
