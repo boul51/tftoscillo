@@ -51,7 +51,11 @@ run:
 	echo "Starting upload"; \
 	arduino-cli upload --fqbn $(FQBN) --port $$SERIALPORT --input-file $(BINFILE); \
 	echo "Starting command $(DEBUG_CMD) $$SERIALPORT, use DEBUG_CMD env variable to override"; \
-	sleep 0.5; \
+	sleep 1; \
+	echo "Waiting for serial port to settle"; \
+	while [ ! -e $$SERIALPORT ]; do sleep 0.1; done; \
+	echo "Serial port is ready"; \
+	stty raw -F $$SERIALPORT -echo; \
 	$(DEBUG_CMD) $$SERIALPORT
 
 clean:
