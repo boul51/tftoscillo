@@ -7,7 +7,6 @@
 
 #include <GenSigDma.h>
 #include <AdcDma.h>
-#include <LibDbg.h>
 #include <PrintStream.h>
 #include <MemoryFree.h>
 
@@ -15,6 +14,15 @@
 #include "robotlcdoscdisplaydriver.h"
 
 #include "tftoscillo.h"
+
+#if HAS_LOGGER != 1
+#define logdebug(...)
+#define loginfo(...)
+#define logwarning(...)
+#define logerror(...)
+#endif
+
+#include "platform_logger.h"
 
 /**** DEFINES ****/
 
@@ -91,6 +99,9 @@ AdcDma *g_adcDma = NULL;
 nboul::oscdisplay::OscDisplay* m_display = nullptr;
 
 SerialCommand SCmd;
+
+#include <CircularBufferLogger.h>
+CircularLogBufferLogger<512> CLog;
 
 // Colors definitions
 #define BG_COLOR				255, 255, 255
@@ -352,11 +363,15 @@ VAR_DISPLAY g_fpsVarDisplay =
 
 void setup() {
 
-    SERIAL_IFACE.begin(115200);
+	PlatformLogger::inst().echo(false);
+	PlatformLogger::inst().auto_flush(false);
+	loglevel(log_level_e::info);
 
+	SERIAL_IFACE.begin(115200);
     while (!SERIAL_IFACE) {}
+	printf_init(SERIAL_IFACE);
 
-	PF(true, "Entering setup, available memory %d\n", freeMemory());
+	loginfo("Entering setup, available memory %d\n", freeMemory());
 
 	auto driver = new nboul::oscdisplaydriver::RobotLcdDisplayDriver();
 	m_display = new nboul::oscdisplay::OscDisplay(TFT_WIDTH, TFT_HEIGHT, driver);
@@ -424,7 +439,9 @@ void setup() {
 	// Auto calibrate first channel
 	calChannel(0);
 
-	PF(true, "Setup done, starting, available memory %d !", freeMemory());
+	loginfo("Setup done, starting, available memory %d\n", freeMemory());
+
+	logflush();
 }
 
 void calChannel(int chIdx)
@@ -448,7 +465,7 @@ void calChannel(int chIdx)
 		avg = 0.;
 		int g = AdcDma::HwGainAtIndex(iGain);
 
-		PF(true, "Setting hwGain %d\n", g);
+		loginfo("Setting hwGain %d\n", g);
 		g_adcDma->SetChannelGain(ch->channel, g);
 		//g_adcDma->SetChannelGain(ch->channel, CAL_HW_GAIN);
 		for (int i = 0; i < avgCnt; i++) {
@@ -795,7 +812,7 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 			sample = g_adcDma->sample(rawSample);
 			channel = g_adcDma->channel(rawSample);
 
-			PF(false, "Got channel %d, sample %d\n", channel, sample);
+			logdebug("Got channel %d, sample %d\n", channel, sample);
 
 			// We have samples for input channels, but also for potentiometers, so channelDesc may be null
 			if ((channelDesc = getChannelDesc(channel))) {
@@ -818,7 +835,7 @@ void mapBufferValues(int frameOffset, uint16_t *buf, int framesCount)
 			}
 		}
 
-		PF(false, "sf %d\n", g_drawState.mappedFrames);
+		logdebug("sf %d\n", g_drawState.mappedFrames);
 		g_drawState.mappedFrames++;
 
 		if (g_drawState.mappedFrames == TFT_WIDTH)
@@ -1000,7 +1017,7 @@ void drawTriggerStatus()
 				}
 			}
 			sprintf(textBuf, "T(ch%d)", getChannelIndex(tgAdcChannel) + 1); // Draw channel index + 1
-			PF(DBG_TEXT, "drawing text at %d:%d\n", 10, TEXT_DOWN_Y_OFFSET);
+			logdebug("drawing text at %d:%d\n", 10, TEXT_DOWN_Y_OFFSET);
 			TFTscreen.text(textBuf, TFT_WIDTH * 2 / 3, TEXT_DOWN_Y_OFFSET);
 		}
 	}
@@ -1010,7 +1027,6 @@ void drawTriggerStatus()
 
 void drawGrid(int minX, int maxX)
 {
-	PF(false, "++\n");
 	// Min and max y for horizontal lines
 	// We'll use it to start vertical lines from them
 	int minY = 0, maxY = 0;
@@ -1074,7 +1090,7 @@ void drawGrid(int minX, int maxX)
 
 void drawEraseSamples(bool bDraw, bool bErase)
 {
-	PF(false, "g_drawState.drawnFrames %d, g_drawState.sampledFrames %d\n", g_drawState.drawnFrames, g_drawState.mappedFrames);
+	logdebug("g_drawState.drawnFrames %d, g_drawState.sampledFrames %d\n", g_drawState.drawnFrames, g_drawState.mappedFrames);
 	int s_prevZoom = 1;
 
 	// Draw current sample before drawing it (used in fast mode)
@@ -1136,7 +1152,7 @@ void drawEraseSamples(bool bDraw, bool bErase)
 	else if (bDraw) {
 		for (int xStart = g_drawState.drawnFrames; xStart + 1 < g_drawState.mappedFrames; xStart++) {
 
-			PF(false, "x0 %d, x1 %d, df %d, sf %d\n", xStart, xStart + 1, g_drawState.drawnFrames, g_drawState.mappedFrames);
+			logdebug("x0 %d, x1 %d, df %d, sf %d\n", xStart, xStart + 1, g_drawState.drawnFrames, g_drawState.mappedFrames);
 
             for (uint32_t iChannel = 0; iChannel < g_scopeState.scopeChannelsCount; iChannel++) {
 				CHANNEL_DESC *pDesc = &g_channelDescs[iChannel];
@@ -1190,7 +1206,6 @@ bool computeFrameRate()
 
 void initDrawState()
 {
-	PF(false, "++\n");
 	g_drawState.drawnFrames = 0;
 	g_drawState.mappedFrames = 0;
 	g_drawState.rxFrames = 0;
@@ -1198,7 +1213,6 @@ void initDrawState()
 
 void initScopeState()
 {
-	PF(false, "++\n");
 	g_scopeState.triggerStatus = TRIGGER_STATUS_WAITING;
 	g_scopeState.bTriggerStatusChanged = true;
 }
@@ -1256,11 +1270,11 @@ void findTriggerSample(uint16_t *buffer, int buflen, int *triggerIndex)
 	}
 
 	if (!bFound) {
-		PF(true, "Did not find trigger sample !\n");
+		logdebug("Did not find trigger sample !\n");
 	}
 
 	if (prevTriggerIndex < *triggerIndex) {
-		PF(true, "New trigger index is later !\n");
+		logdebug("New trigger index is later !\n");
 	}
 
 	return;
@@ -1311,7 +1325,7 @@ bool rxHandler(uint16_t *buffer, int buflen, bool bIsTrigger, int triggerIndex, 
 
 	// Stop AdcDma if we have enough samples
 	if (g_drawState.mappedFrames == TFT_WIDTH) {
-		PF(DBG_RX, "Got enough frames, stopping AdcDma\n");
+		logdebug("Got enough frames, stopping AdcDma\n");
 		g_adcDma->Stop();
 	}
 
@@ -1373,7 +1387,7 @@ void updatePotsVars(uint16_t *buffer)
 					*potVar->value = value;
 				}
 				potVar->forceRead = false;
-				PF(DBG_POTS, "New value for potVar %s: %d (%d > %d)\n", potVar->name, *potVar->value, diff, potVar->margin);
+				logdebug("New value for potVar %s: %d (%d > %d)\n", potVar->name, *potVar->value, diff, potVar->margin);
 				if (potVar->cbPotVarChanged) {
 					potVar->cbPotVarChanged(potVar);
 				}
@@ -1436,11 +1450,11 @@ void setupAdcDma()
 		// is limited by ADC_MAX_MEM
 		irqsPerSec = g_scopeState.sampleRate / buflen * sizeof(uint16_t) * channelsCount;
 		if (irqsPerSec > maxIrqsPerSec) {
-			PF(DBG_BUFFERS, "ajusting buflen, was %d\n", buflen);
+			logdebug("ajusting buflen, was %d\n", buflen);
 			buflen = g_scopeState.sampleRate / maxIrqsPerSec * sizeof(uint16_t) * channelsCount ;
 		}
 
-		PF(DBG_BUFFERS, "Calculated buflen %d, irqs/s %d\n", buflen, g_scopeState.sampleRate / buflen * sizeof(uint16_t) * channelsCount);
+		logdebug("Calculated buflen %d, irqs/s %d\n", buflen, g_scopeState.sampleRate / buflen * sizeof(uint16_t) * channelsCount);
 	}
 
 	if (buflen * bufcount > ADC_DMA_MAX_MEM) {
@@ -1451,7 +1465,7 @@ void setupAdcDma()
 		buflen = sizeof(uint16_t) * channelsCount;
 	}
 
-	PF(DBG_BUFFERS, "buflen %d\n", buflen);
+	logdebug("buflen %d\n", buflen);
 
 	g_adcDma->SetAdcChannels(channels, channelsCount);
 	g_adcDma->SetBuffers(bufcount, buflen);
@@ -1654,7 +1668,7 @@ bool setChannelGlobalGain(int chIdx, uint32_t potValue)
 	}
 	pChDesc->swGain = (float)gain / (float)pChDesc->hwGain;
 
-	PF(true, "Channel %d, setting hwGain %d, swGain %f\n", chIdx, pChDesc->hwGain, pChDesc->swGain);
+	logdebug("Channel %d, setting hwGain %d, swGain %f\n", chIdx, pChDesc->hwGain, pChDesc->swGain);
 
 	g_adcDma->SetChannelGain(pChDesc->channel, pChDesc->hwGain);
 
@@ -1738,7 +1752,7 @@ void loop()
 
 		setupAdcDma();
 
-		PF(false, "Starting ADCDMA\n");
+		logdebug("Starting ADCDMA\n");
 		g_adcDma->Start();
 	}
 
@@ -1757,8 +1771,10 @@ void loop()
 		// in slow mode
 		if (g_adcDma->GetCaptureState() == AdcDma::CaptureStateStopped)
 		{
-			PF(true, "Capture is stopped, restarting !\n");
+			loginfo("Capture is stopped, restarting !\n");
 			g_adcDma->Start();
 		}
 	}
+
+	logflush();
 }

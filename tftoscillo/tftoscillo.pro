@@ -28,6 +28,8 @@ INCLUDEPATH += \
     $${LIBDIR}/TFT/src \
     $${LIBDIR}/Arduino-PrintStream/src \
     $${LIBDIR}/MemoryFree \
+    $${LIBDIR}/arduino-printf/src \
+    $${LIBDIR}/arduino-logger/src \
 
 HEADERS += \
     $${LIBDIR}/GenSigDma/*.h \
@@ -39,6 +41,8 @@ HEADERS += \
     $${LIBDIR}/TFT/src/*.h \
     $${LIBDIR}/Arduino-PrintStream/src/*.h \
     $${LIBDIR}/MemoryFree/*.h \
+    $${LIBDIR}/arduino-printf/src/*.h \
+    $${LIBDIR}/arduino-logger/src/*.h \
 
 SOURCES += \
     tftoscillo.ino \
@@ -51,6 +55,8 @@ SOURCES += \
     $${LIBDIR}/TFT/src/*.cpp \
     $${LIBDIR}/Arduino-PrintStream/src/*.cpp \
     $${LIBDIR}/MemoryFree/*.cpp \
+    $${LIBDIR}/arduino-printf/src/*.cpp \
+    $${LIBDIR}/arduino-logger/src/*.cpp \
 
 OTHER_FILES += \
     Makefile \

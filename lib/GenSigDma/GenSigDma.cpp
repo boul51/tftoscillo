@@ -3,18 +3,17 @@
 
 #include "GenSigDma.h"
 
+#if HAS_LOGGER==1
+#include "platform_logger.h"
+#else
+#define logdebug(...)
+#define loginfo(...)
+#define logwarning(...)
+#define logerror(...)
+#endif
+
 // DAC and timer setup from:
 // http://forum.arduino.cc/index.php?PHPSESSID=58ac5heg9q21h307sldn72jkm6&topic=205096.0
-
-#ifdef p
-#undef p
-#endif
-#define p(...) gensigdma_print(__VA_ARGS__)
-
-#ifdef F2S
-#undef F2S
-#endif
-#define F2S(f) gensigdma_floatToStr(f, 4)
 
 #define DACC_DMA_BUF_SIZE 8000
 #define DACC_DMA_BUF_NUM  1
@@ -92,9 +91,11 @@ bool GenSigDma::Start()
 	if (m_started)
 		return false;
 
+	loginfo("Starting GenSigDma\n");
+
 	// If no valid waveform was set, abort
 	if (m_waveform == WaveFormNone) {
-		p("%s: No valid waveform is defined !\n", __FUNCTION__);
+		logerror("%s: No valid waveform is defined !\n", __FUNCTION__);
 		return false;
 	}
 
@@ -122,11 +123,11 @@ bool GenSigDma::Stop()
 bool GenSigDma::SetTimerChannel(int timerChannel)
 {
 	if (timerChannel < 0 || timerChannel > DAC_DMA_MAX_TIMER_CHANNEL) {
-		p("GenSigDma::SetTimerChannel: Invalid channel %d\n", timerChannel);
+		logerror("GenSigDma::SetTimerChannel: Invalid channel %d\n", timerChannel);
 	}
 
 	if (m_started) {
-		p("GenSigDma::SetTimerChannel: Started, won't do anything\n");
+		logerror("GenSigDma::SetTimerChannel: Started, won't do anything\n");
 		return false;
 	}
 
@@ -142,17 +143,17 @@ bool GenSigDma::SetTimerChannel(int timerChannel)
 bool GenSigDma::SetWaveForm(WaveForm wf, float freq, float *pActualFreq)
 {
 	if (wf <= WaveFormMin || wf >= WaveFormMax) {
-		p("GenSigDma::SetWaveForm: Invalid waveform !\n");
+		logerror("GenSigDma::SetWaveForm: Invalid waveform !\n");
 		return false;
 	}
 
 	if (freq == 0.) {
-		p("GenSigDma::SetWaveForm: Invalid frequency 0.0 !\n");
+		logerror("GenSigDma::SetWaveForm: Invalid frequency 0.0 !\n");
 		return false;
 	}
 
 	if (m_started) {
-		p("GenSigDma::SetWaveForm: Already running !\n");
+		logerror("GenSigDma::SetWaveForm: Already running !\n");
 		return false;
 	}
 
@@ -167,7 +168,7 @@ bool GenSigDma::SetWaveForm(WaveForm wf, float freq, float *pActualFreq)
 	m_waveform = wf;
 
 	if (!SetupTimer()) {
-		p("GenSigDma::SetupTimer: Failed in SetupTimer !\n");
+		logerror("GenSigDma::SetupTimer: Failed in SetupTimer !\n");
 		return false;
 	}
 
@@ -185,7 +186,7 @@ bool GenSigDma::SetWaveForm(WaveForm wf, float freq, float *pActualFreq)
 		GenTriangle();
 		break;
 	default :
-		p("%s: Invalid waveform !\n", __FUNCTION__);
+		logerror("%s: Invalid waveform !\n", __FUNCTION__);
 		return false;
 	}
 
@@ -199,12 +200,12 @@ bool GenSigDma::SetWaveForm(WaveForm wf, float freq, float *pActualFreq)
 bool GenSigDma::SetMaxSampleRate(int rate)
 {
 	if (m_started) {
-		p("GenSigDma::SetMaxSampleRate: Already running !\n");
+		logerror("GenSigDma::SetMaxSampleRate: Already running !\n");
 		return false;
 	}
 
 	if (rate > GENSIGDMA_MAX_SAMPLE_RATE) {
-		p("Can't exceed sample rate %d !\n", GENSIGDMA_MAX_SAMPLE_RATE);
+		logerror("Can't exceed sample rate %d !\n", GENSIGDMA_MAX_SAMPLE_RATE);
 		return false;
 	}
 
@@ -264,7 +265,7 @@ bool GenSigDma::SetupTimer()
 	}
 
 	if (!bFound) {
-		p("No prescaler found !");
+		logerror("No prescaler found !\n");
 		return false;
 	}
 
@@ -283,14 +284,14 @@ bool GenSigDma::SetupTimer()
 	m_periodsPerBuffer = m_samplesPerBuffer / m_freqMult;
 	m_samplesPerPeriod = m_samplesPerBuffer / m_periodsPerBuffer;
 
-	p("Setting up timer with parameters:\n");
-	p(" - Timer channel %d\n", m_timerChannel);
-	p(" - Freq %s\n", F2S(m_freq));
-	p(" - Sample rate %d\n", m_sampleRate);
-	p(" - Div %d\n", prescaler.div);
-	p(" - RC %d\n", RC);
-	p(" - Samples per buffer %d\n", m_samplesPerBuffer);
-	p(" - FreqMult %d\n", int((float)m_sampleRate / m_freq));
+	loginfo("Setting up GenSigDma timer with parameters:\n");
+	loginfo(" - Timer channel %d\n", m_timerChannel);
+	loginfo(" - Freq %d\n", m_freq);
+	loginfo(" - Sample rate %d\n", m_sampleRate);
+	loginfo(" - Div %d\n", prescaler.div);
+	loginfo(" - RC %d\n", RC);
+	loginfo(" - Samples per buffer %d\n", m_samplesPerBuffer);
+	loginfo(" - FreqMult %d\n", int((float)m_sampleRate / m_freq));
 
 	// And write data to timer controller
 
@@ -479,7 +480,7 @@ bool GenSigDma::SetupDacc() {
 
 bool GenSigDma::SetupDma()
 {
-	p("GenSigDma::SetupDma TODO: Set next pointer register !\n");
+	loginfo("TODO: Set next pointer register !\n");
 
 	DACC->DACC_TPR = (uint32_t)&m_buffers[0][0];
 	DACC->DACC_TCR = m_samplesPerBuffer;
@@ -604,12 +605,12 @@ bool GenSigDma::GenTriangle()
 
 		m_buffers[0][sampleIndex] = (int)val;
 
-		p("%d: %d\n", sampleIndex, (int)val);
+		logdebug("%d: %d\n", sampleIndex, (int)val);
 
 		if (sampleIndex > 0) {
 			int diff = m_buffers[0][sampleIndex] - m_buffers[0][sampleIndex - 1];
 			if (diff > 100 || diff < -100) {
-				p("Gap 1 at %d (%d)\n", sampleIndex, diff);
+				logdebug("Gap 1 at %d (%d)\n", sampleIndex, diff);
 			}
 		}
 	}
@@ -658,7 +659,7 @@ bool GenSigDma::GenSin()
 	DuplicateBuffers();
 
 	int tEnd = micros();
-	p("Generated sinus waveform in %d us\n", tEnd - tStart);
+	loginfo("Generated sinus waveform in %d us\n", tEnd - tStart);
 
 	return true;
 }
@@ -681,7 +682,7 @@ void GenSigDma::DisplayStats(int sec)
 {
 	int samples = m_stats.lastSamplesCount;
 	int irqs = m_stats.lastIrqsCount;
-	p("Sec: %d, samples sent: %d, irqs: %d\n", sec, samples, irqs);
+	loginfo("Sec: %d, samples sent: %d, irqs: %d\n", sec, samples, irqs);
 }
 
 void GenSigDma::Loop(bool bResetStats)

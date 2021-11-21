@@ -4,6 +4,7 @@ export BINFILE=$(BINDIR)/tftoscillo.ino.bin
 
 export FQBN ?= "arduino:sam:arduino_due_x"
 export DEBUG_CMD ?= minicom -D
+export HAS_LOGGER ?= 1
 
 # Define SERIAL_IFACE to:
 # - Serial to use programming port (near the power supply connector)
@@ -12,8 +13,6 @@ export DEBUG_CMD ?= minicom -D
 
 export SERIAL_IFACE ?= SerialUSB
 
-export LIBDBG_ENABLE ?= 0
-
 all: build
 
 build:
@@ -21,11 +20,10 @@ build:
 		--verbose \
 		--fqbn $(FQBN) \
 		--warnings all \
-		--build-property 'compiler.cpp.extra_flags=-Wall -DSERIALCOMMAND_HARDWAREONLY -DSERIAL_IFACE=$(SERIAL_IFACE) -DLIBDBG_ENABLE=$(LIBDBG_ENABLE)' \
+		--build-property 'compiler.cpp.extra_flags=-Wall -DNO_PRAGMA_MARK -DHAS_LOGGER=$(HAS_LOGGER) -I$(CURDIR) -DSERIALCOMMAND_HARDWAREONLY -DSERIAL_IFACE=$(SERIAL_IFACE)' \
 		--library "$(LIBDIR)/AdcDma" \
 		--library "$(LIBDIR)/ArduinoSerialCommand" \
 		--library "$(LIBDIR)/GenSigDma" \
-		--library "$(LIBDIR)/LibDbg" \
 		--library "$(LIBDIR)/TFT" \
 		--library "$(LIBDIR)/Arduino-PrintStream" \
 		--library "$(LIBDIR)/MemoryFree" \
