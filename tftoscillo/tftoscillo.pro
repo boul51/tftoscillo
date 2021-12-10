@@ -23,8 +23,8 @@ INCLUDEPATH += \
     $${LIBDIR}/AdcDma \
     $${LIBDIR}/LibDbg \
     $${LIBDIR}/OscDisplay \
-    $${LIBDIR}/OscDisplayDriver \
     $${LIBDIR}/ArduinoSerialCommand \
+    $${LIBDIR}/Sample \
     $${LIBDIR}/TFT/src \
     $${LIBDIR}/Arduino-PrintStream/src \
     $${LIBDIR}/MemoryFree \
@@ -36,8 +36,12 @@ HEADERS += \
     $${LIBDIR}/AdcDma/*.h \
     $${LIBDIR}/LibDbg/*.h \
     $${LIBDIR}/OscDisplay/*.h \
-    $${LIBDIR}/OscDisplayDriver/*.h \
+    $${LIBDIR}/OscDisplay/canvas/*.h \
+    $${LIBDIR}/OscDisplay/drawable/*.h \
+    $${LIBDIR}/OscDisplay/drawableprimitive/*.h \
+    $${LIBDIR}/OscDisplay/geometry/*.h \
     $${LIBDIR}/ArduinoSerialCommand/*.h \
+    $${LIBDIR}/Sample/*.h \
     $${LIBDIR}/TFT/src/*.h \
     $${LIBDIR}/Arduino-PrintStream/src/*.h \
     $${LIBDIR}/MemoryFree/*.h \
@@ -50,7 +54,8 @@ SOURCES += \
     $${LIBDIR}/AdcDma/*.cpp \
     $${LIBDIR}/LibDbg/*.cpp \
     $${LIBDIR}/OscDisplay/*.cpp \
-    $${LIBDIR}/OscDisplayDriver/*.cpp \
+    $${LIBDIR}/OscDisplay/geometry/*.cpp \
+    $${LIBDIR}/OscDisplay/test/robotlcd/*.ino \
     $${LIBDIR}/ArduinoSerialCommand/*.cpp \
     $${LIBDIR}/TFT/src/*.cpp \
     $${LIBDIR}/Arduino-PrintStream/src/*.cpp \

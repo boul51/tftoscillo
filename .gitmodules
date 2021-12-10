@@ -19,9 +19,6 @@
 [submodule "lib/OscDisplay"]
 	path = lib/OscDisplay
 	url = https://github.com/boul51/OscDisplay.git
-[submodule "lib/OscDisplayDriver"]
-	path = lib/OscDisplayDriver
-	url = https://github.com/boul51/OscDisplayDriver.git
 [submodule "lib/arduino-printf"]
 	path = lib/arduino-printf
 	url = https://github.com/embeddedartistry/arduino-printf.git

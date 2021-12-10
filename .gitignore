@@ -3,3 +3,6 @@ tftoscillo/compile_commands.json
 tftoscillo/.cache
 build*
 bin*
+*.elf
+*.bin
+*.map

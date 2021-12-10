@@ -37,7 +37,6 @@
 #define TFT_BL_PIN    9		// Backlight
 #define TFT_RST_PIN  10		// Reset pin
 #define TFT_DC_PIN   11		// Command / Display data pin
-#define USD_CS_PIN	 12	    // MicroSD chip select
 #define TFT_CS_PIN   13		// Chip select pin
 
 // Pot and scope inputs
@@ -372,8 +371,8 @@ void setup() {
 
 	loginfo("Entering setup, available memory %d\n", freeMemory());
 
-	auto driver = new nboul::oscdisplaydriver::RobotLcdDisplayDriver();
-	m_display = new nboul::oscdisplay::OscDisplay(TFT_WIDTH, TFT_HEIGHT, driver);
+	auto driver = new nboul::oscdisplay::RobotLcdDisplayDriver(TFT_WIDTH, TFT_HEIGHT, TFT_BL_PIN, TFT_RST_PIN, TFT_DC_PIN, TFT_CS_PIN);
+	m_display = new nboul::oscdisplay::OscDisplay(driver);
 
 	g_channelDescs = (CHANNEL_DESC *)malloc(DIMOF(g_scopeChannels) * sizeof(CHANNEL_DESC));
 
